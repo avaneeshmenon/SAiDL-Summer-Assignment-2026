@@ -207,7 +207,7 @@ def main():
     cfg = TransformerConfig()
 
     # "standard", "sliding_window", "sparse_block", "linear", "gqa", "mqa", "softmax_free"
-    cfg.attention_type = "standard"
+    cfg.attention_type = "gqa"
     cfg.context_length = 1024
 
     print(f"\nRunning: {cfg.attention_type} | ctx={cfg.context_length}\n")
@@ -258,6 +258,7 @@ def main():
     final_metrics["params"] = model.count_parameters()
     final_metrics["epoch_time_avg"] = sum(
         history["epoch_time"]) / len(history["epoch_time"])
+    final_metrics["peak_mem_mb"] = max(history["peak_mem_mb"])
 
     # ── Save metrics
     with open(f"{save_dir}/metrics.json", "w") as f:
@@ -279,24 +280,8 @@ def main():
     # ── Save model
     torch.save(model.state_dict(), f"{save_dir}/model.pt")
 
-    # ─────────────────────────────────────────────
-    # 🔥 GLOBAL COMPARISON TABLE (VERY IMPORTANT)
-    # ─────────────────────────────────────────────
-    summary_path = "experiments/attention/summary.json"
-
-    if os.path.exists(summary_path):
-        with open(summary_path, "r") as f:
-            all_results = json.load(f)
-    else:
-        all_results = []
-
-    all_results.append(final_metrics)
-
-    with open(summary_path, "w") as f:
-        json.dump(all_results, f, indent=4)
-
-    # Print full table
-    print_results_table(all_results)
+    # Print table (single run)
+    print_results_table([final_metrics])
 
     print("\nSample:\n", generated)
 
