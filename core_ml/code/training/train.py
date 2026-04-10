@@ -32,7 +32,7 @@ def train(model, cfg, train_loader, val_loader, optimizer, device):
     history = {
         "step": [], "train_loss": [], "val_loss": [], "perplexity": [],
         "throughput": [], "peak_mem_mb": [], "lr": [],
-        "grad_norm": [], "loss_spike": [],
+        "grad_norm": [], "loss_spike": [], "epoch_time": []
     }
 
     step = 0
@@ -44,6 +44,10 @@ def train(model, cfg, train_loader, val_loader, optimizer, device):
 
         if device == "cuda":
             torch.cuda.reset_peak_memory_stats()
+
+        # 🔥 Clean table header (printed once per epoch)
+        print("\nStep | Train | Val | PPL | Thrpt | Mem")
+        print("-" * 60)
 
         for x, y in train_loader:
             x, y = x.to(device), y.to(device)
@@ -114,13 +118,16 @@ def train(model, cfg, train_loader, val_loader, optimizer, device):
                     f"Mem {train_peak_mem:.0f} MB"
                 )
 
-        # ✅ Proper end-of-epoch evaluation
+        # ── End of epoch ─────────────────────────────
         metrics = evaluate(model, val_loader, device, cfg.eval_iters)
-        print(
-            f"[Epoch {epoch}] Val Loss: {metrics['val_loss']:.4f}, PPL: {metrics['perplexity']:.2f}")
 
         epoch_time = time.perf_counter() - epoch_start
-        print(f"\n=== Epoch {epoch} | Time {epoch_time:.1f}s | "
-              f"Train thrpt {epoch_tokens/epoch_time:.0f} tok/s ===\n")
+        history["epoch_time"].append(epoch_time)
+
+        print(f"\n[Epoch {epoch}] Val Loss: {metrics['val_loss']:.4f}, "
+              f"PPL: {metrics['perplexity']:.2f}")
+
+        print(f"=== Epoch {epoch} | Time: {epoch_time:.1f}s | "
+              f"Train thrpt: {epoch_tokens/epoch_time:.0f} tok/s ===\n")
 
     return history
