@@ -18,6 +18,9 @@ def evaluate(model, loader, device, max_iters=50):
 
     model.eval()
 
+    if device == "cuda":
+        torch.cuda.reset_peak_memory_stats()
+
     total_loss = 0.0
     total_tokens = 0
     n_batches = 0
@@ -47,10 +50,16 @@ def evaluate(model, loader, device, max_iters=50):
     perplexity = math.exp(avg_loss)
     throughput = total_tokens / elapsed
 
+    peak_mem = (
+        torch.cuda.max_memory_allocated() / 1e6
+        if device == "cuda" else 0.0
+    )
+
     model.train()
 
     return {
         "val_loss": avg_loss,
         "perplexity": perplexity,
         "throughput": throughput,
+        "peak_mem_mb": peak_mem,
     }

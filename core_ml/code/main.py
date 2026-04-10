@@ -107,10 +107,6 @@ def main():
     final_metrics = evaluate(model, val_loader, device,
                              max_iters=len(val_loader))
 
-    # Ensure key exists (fix crash)
-    if "peak_mem_mb" not in final_metrics:
-        final_metrics["peak_mem_mb"] = 0.0
-
     # Add metadata
     final_metrics["model"] = "baseline"
     final_metrics["context_length"] = cfg.context_length

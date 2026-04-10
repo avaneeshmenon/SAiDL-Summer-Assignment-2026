@@ -10,8 +10,8 @@ def generate(
     device,
     prompt,
     max_new_tokens=100,
-    temperature=0.9,
-    top_k=50,
+    temperature=0.7,
+    top_k=40,
 ):
     """
     Generate text using top-k sampling.
