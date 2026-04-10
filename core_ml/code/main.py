@@ -46,27 +46,27 @@ def main():
     cfg = TransformerConfig()
     print(cfg)
 
-    # ── Tokenizer + Dataset ────────────────────────────────────────────────
+    # ── Tokenizer + Dataset ────────────────────────────────
     enc = load_tokenizer()
     train_tokens, val_tokens = tokenize_wikitext2(enc)
 
-    # ── DataLoaders ────────────────────────────────────────────────────────
+    # ── DataLoaders ────────────────────────────────────────
     train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
 
     print(f"Train batches: {len(train_loader)}")
     print(f"Val batches  : {len(val_loader)}")
 
-    # ── Model ──────────────────────────────────────────────────────────────
+    # ── Model ──────────────────────────────────────────────
     model = TransformerLM(cfg).to(device)
 
     total_params = sum(p.numel()
                        for p in model.parameters() if p.requires_grad)
     print(f"Model parameters: {total_params:,}")
 
-    # ── Optimizer ──────────────────────────────────────────────────────────
+    # ── Optimizer ──────────────────────────────────────────
     optimizer = build_optimizer(model, cfg)
 
-    # ── Training ───────────────────────────────────────────────────────────
+    # ── Training ───────────────────────────────────────────
     print("\nStarting training...\n")
 
     history = train(
@@ -78,69 +78,52 @@ def main():
         device
     )
 
+    # ── Create folder early ─────────────────────────────────
     os.makedirs("experiments/baseline", exist_ok=True)
 
+    # ── Plotting ────────────────────────────────────────────
     steps = history["step"]
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
 
-    # 1. Train vs Val loss
     axes[0].plot(steps, history["train_loss"], label="Train Loss")
     axes[0].plot(steps, history["val_loss"], label="Val Loss")
-    axes[0].set_xlabel("Step")
-    axes[0].set_ylabel("Loss")
     axes[0].set_title("Loss Curves")
     axes[0].legend()
 
-    # 2. Perplexity
     axes[1].plot(steps, history["perplexity"])
-    axes[1].set_xlabel("Step")
-    axes[1].set_ylabel("Perplexity")
-    axes[1].set_title("Validation Perplexity")
+    axes[1].set_title("Perplexity")
 
-    # 3. Learning rate
     axes[2].plot(steps, history["lr"])
-    axes[2].set_xlabel("Step")
-    axes[2].set_ylabel("Learning Rate")
-    axes[2].set_title("LR Schedule")
+    axes[2].set_title("LR")
 
     plt.tight_layout()
-
-    # 🔥 THIS is what you were missing
     plt.savefig("experiments/baseline/baseline_training_curves.png")
+    plt.close()
 
-    plt.show()
+    print("Saved plot")
 
-    print("Saved plot → experiments/baseline/baseline_training_curves.png")
-    # ── Final evaluation ─────────────────────────────
+    # ── Evaluation ─────────────────────────────────────────
     final_metrics = evaluate(model, val_loader, device,
                              max_iters=len(val_loader))
 
+    # Ensure key exists (fix crash)
+    if "peak_mem_mb" not in final_metrics:
+        final_metrics["peak_mem_mb"] = 0.0
+
+    # Add metadata
     final_metrics["model"] = "baseline"
     final_metrics["context_length"] = cfg.context_length
     final_metrics["params"] = model.count_parameters()
 
-    # ── print table ──
-    print_results_table([final_metrics])
-
-    # ── save table ──
-    with open("experiments/baseline/results_table.txt", "w") as f:
-        f.write(str(final_metrics))
-
-    # ── save metrics ──
-    os.makedirs("experiments/baseline", exist_ok=True)
-
+    # ── SAVE FIRST (critical) ──────────────────────────────
     with open("experiments/baseline/baseline_metrics.json", "w") as f:
         json.dump(final_metrics, f, indent=4)
 
-    with open("experiments/baseline/sample_generation.txt", "w") as f:
-        f.write(f"Prompt: {prompt}\n\n")
-        f.write(generated)
+    with open("experiments/baseline/results_table.txt", "w") as f:
+        f.write(str(final_metrics))
 
-    torch.save(model.state_dict(),
-               "experiments/baseline/baseline_transformer.pt")
-
-    # ── Generation (qualitative check) ─────────────────────────────────────
+    # ── Generation (move BEFORE saving file) ───────────────
     prompt = "The history of artificial intelligence began"
 
     generated = generate(
@@ -152,6 +135,20 @@ def main():
         max_new_tokens=80
     )
 
+    with open("experiments/baseline/sample_generation.txt", "w") as f:
+        f.write(f"Prompt: {prompt}\n\n")
+        f.write(generated)
+
+    # ── Save model ─────────────────────────────────────────
+    torch.save(
+        model.state_dict(),
+        "experiments/baseline/baseline_transformer.pt"
+    )
+
+    # ── Print table LAST (safe now) ─────────────────────────
+    print_results_table([final_metrics])
+
+    # ── Print sample ───────────────────────────────────────
     print("\n" + "=" * 50)
     print(f"Prompt   : {prompt}")
     print(f"Generated:\n{generated}")
