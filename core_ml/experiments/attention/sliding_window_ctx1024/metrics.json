@@ -1,0 +1,10 @@
+{
+    "val_loss": 5.459228484861312,
+    "perplexity": 234.91611309446301,
+    "throughput": 26341.653115807192,
+    "peak_mem_mb": 4059.308544,
+    "model": "sliding_window",
+    "context_length": 1024,
+    "params": 45158912,
+    "epoch_time_avg": 139.67658522600004
+}
