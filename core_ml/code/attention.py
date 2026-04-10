@@ -5,6 +5,8 @@ import torch.nn.functional as F
 # ─────────────────────────────────────────────
 # Helper
 # ─────────────────────────────────────────────
+
+
 def reshape_heads(x, B, T, n_heads, d_head):
     return x.view(B, T, n_heads, d_head).transpose(1, 2)
 
@@ -130,9 +132,9 @@ class LinearAttention(nn.Module):
         assert cfg.d_model % cfg.n_heads == 0
 
         self.n_heads = cfg.n_heads
-        self.d_head  = cfg.d_model // cfg.n_heads
+        self.d_head = cfg.d_model // cfg.n_heads
         self.d_model = cfg.d_model
-        self.drop    = nn.Dropout(getattr(cfg, "dropout", 0.0))
+        self.drop = nn.Dropout(getattr(cfg, "dropout", 0.0))
 
         self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
         self.out = nn.Linear(cfg.d_model, cfg.d_model, bias=False)
@@ -191,6 +193,8 @@ class LinearAttention(nn.Module):
 # ─────────────────────────────────────────────
 # 5. GQA
 # ─────────────────────────────────────────────
+
+
 class GroupedQueryAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -222,11 +226,34 @@ class GroupedQueryAttention(nn.Module):
 # ─────────────────────────────────────────────
 # 6. MQA
 # ─────────────────────────────────────────────
-class MultiQueryAttention(GroupedQueryAttention):
+class MultiQueryAttention(nn.Module):
     def __init__(self, cfg):
-        cfg.n_heads = cfg.n_heads
-        super().__init__(cfg)
-        self.n_kv = 1
+        super().__init__()
+
+        self.n_heads = cfg.n_heads
+        self.n_kv = 1  # ✅ FIX: define early
+        self.d_head = cfg.d_model // cfg.n_heads
+
+        self.q = nn.Linear(cfg.d_model, cfg.d_model, bias=False)
+        self.k = nn.Linear(cfg.d_model, self.n_kv * self.d_head, bias=False)
+        self.v = nn.Linear(cfg.d_model, self.n_kv * self.d_head, bias=False)
+
+        self.out = nn.Linear(cfg.d_model, cfg.d_model, bias=False)
+
+    def forward(self, x):
+        B, T, C = x.shape
+
+        q = reshape_heads(self.q(x), B, T, self.n_heads, self.d_head)
+        k = reshape_heads(self.k(x), B, T, self.n_kv, self.d_head)
+        v = reshape_heads(self.v(x), B, T, self.n_kv, self.d_head)
+
+        # expand KV to match heads
+        k = k.expand(B, self.n_heads, T, self.d_head)
+        v = v.expand(B, self.n_heads, T, self.d_head)
+
+        out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+
+        return self.out(out.transpose(1, 2).reshape(B, T, C))
 
 
 # ─────────────────────────────────────────────
@@ -273,6 +300,7 @@ ATTENTION_REGISTRY = {
     "mqa": MultiQueryAttention,
     "softmax_free": SoftmaxFreeAttention,
 }
+
 
 def build_attention(cfg):
     return ATTENTION_REGISTRY[cfg.attention_type](cfg)
