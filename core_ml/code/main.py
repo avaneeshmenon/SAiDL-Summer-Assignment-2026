@@ -18,50 +18,47 @@ import os
 import json
 
 
+# ── Clean results table ─────────────────────────────────────
 def print_results_table(metrics_list):
-    print("\n" + "="*90)
-    print(f"{'Model':<25} {'Context':>8} {'Params':>12} {'Val Loss':>10} {'PPL':>10} {'Throughput':>12} {'Peak Mem':>10}")
-    print("-"*90)
+    print("\n" + "="*110)
+    print(f"{'Model':<20} {'Ctx':>6} {'Params':>10} {'ValLoss':>10} {'PPL':>8} {'Thrpt':>10} {'Mem(MB)':>10} {'Epoch(s)':>10}")
+    print("-"*110)
 
     for m in metrics_list:
-        print(f"{m['model']:<25} "
-              f"{m['context_length']:>8} "
-              f"{m['params']:>12,} "
+        print(f"{m['model']:<20} "
+              f"{m['context_length']:>6} "
+              f"{m['params']:>10,} "
               f"{m['val_loss']:>10.4f} "
-              f"{m['perplexity']:>10.2f} "
-              f"{m['throughput']:>12.0f} "
-              f"{m['peak_mem_mb']:>10.1f} MB")
+              f"{m['perplexity']:>8.2f} "
+              f"{m['throughput']:>10.0f} "
+              f"{m['peak_mem_mb']:>10.1f} "
+              f"{m['epoch_time_avg']:>10.1f}")
 
-    print("="*90)
+    print("="*110)
 
 
 # ── Main runner ─────────────────────────────────────────────────────────────
 def main():
 
-    # Device
+    # ── Device ─────────────────────────────────────────────
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
-    # Config
+    # ── Config ─────────────────────────────────────────────
     cfg = TransformerConfig()
-    print(cfg)
 
-    # ── Tokenizer + Dataset ────────────────────────────────
+    # ── Data ───────────────────────────────────────────────
     enc = load_tokenizer()
     train_tokens, val_tokens = tokenize_wikitext2(enc)
-
-    # ── DataLoaders ────────────────────────────────────────
     train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
-
-    print(f"Train batches: {len(train_loader)}")
-    print(f"Val batches  : {len(val_loader)}")
 
     # ── Model ──────────────────────────────────────────────
     model = TransformerLM(cfg).to(device)
-
     total_params = sum(p.numel()
                        for p in model.parameters() if p.requires_grad)
-    print(f"Model parameters: {total_params:,}")
+
+    print(f"Model params: {total_params:,}")
+    print("\nStarting training...\n")
 
     # ── Optimizer ──────────────────────────────────────────
     optimizer = build_optimizer(model, cfg)
@@ -101,7 +98,7 @@ def main():
     plt.savefig("experiments/baseline/baseline_training_curves.png")
     plt.close()
 
-    print("Saved plot")
+    print("Saved training curves")
 
     # ── Evaluation ─────────────────────────────────────────
     final_metrics = evaluate(model, val_loader, device,
@@ -111,6 +108,8 @@ def main():
     final_metrics["model"] = "baseline"
     final_metrics["context_length"] = cfg.context_length
     final_metrics["params"] = model.count_parameters()
+    final_metrics["epoch_time_avg"] = sum(
+        history["epoch_time"]) / len(history["epoch_time"])
 
     # ── SAVE FIRST (critical) ──────────────────────────────
     with open("experiments/baseline/baseline_metrics.json", "w") as f:
@@ -128,12 +127,13 @@ def main():
         cfg,
         device,
         prompt,
-        max_new_tokens=80
+        max_new_tokens=80,
+        temperature=0.7,
+        top_k=40
     )
 
     with open("experiments/baseline/sample_generation.txt", "w") as f:
-        f.write(f"Prompt: {prompt}\n\n")
-        f.write(generated)
+        f.write(f"Prompt: {prompt}\n\n{generated}")
 
     # ── Save model ─────────────────────────────────────────
     torch.save(
@@ -144,11 +144,14 @@ def main():
     # ── Print table LAST (safe now) ─────────────────────────
     print_results_table([final_metrics])
 
-    # ── Print sample ───────────────────────────────────────
-    print("\n" + "=" * 50)
+   # ── Print final results (clean) ─────────────────────────
+    print_results_table([final_metrics])
+
+    print("\nSample Generation:\n")
+    print("="*50)
     print(f"Prompt   : {prompt}")
     print(f"Generated:\n{generated}")
-    print("=" * 50)
+    print("="*50)
 
 
 # ── IMPORTANT (fixes Mac multiprocessing crash) ─────────────────────────────
