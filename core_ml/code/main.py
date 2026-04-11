@@ -208,7 +208,7 @@ def main():
 
     # "standard", "sliding_window", "sparse_block", "linear", "gqa", "mqa", "softmax_free"
     cfg.attention_type = "sliding_window"
-    cfg.context_length = 1024
+    cfg.context_length = 512
 
     print(f"\nRunning: {cfg.attention_type} | ctx={cfg.context_length}\n")
 
