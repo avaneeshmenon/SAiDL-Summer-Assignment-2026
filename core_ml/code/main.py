@@ -33,6 +33,7 @@ def print_results_table(metrics_list):
 
     print("="*110)
 
+
 def print_positional_table(metrics_list):
     print("\n" + "="*120)
     print(f"{'PosEnc':<12} {'TrainCtx':>8} {'TestCtx':>8} {'ValLoss':>10} {'PPL':>8}")
@@ -49,6 +50,8 @@ def print_positional_table(metrics_list):
 # ─────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────
+
+
 def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -146,10 +149,8 @@ def run_positional_experiments():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
-    POS_TYPES = ["learned", "sinusoidal", "rope", "rope_interp", "alibi", "relative"]
-    TEST_CONTEXTS = [512, 1024, 2048]
-
-    all_results = []
+    POS_TYPES = ["learned", "sinusoidal", "rope",
+                 "rope_interp", "alibi", "relative"]
 
     # ✅ Load ONCE
     enc = load_tokenizer()
@@ -164,7 +165,7 @@ def run_positional_experiments():
         cfg.context_length = 512
         cfg.rope_scale = 1.0
 
-        # ✅ Correct mapping
+        # ✅ Mapping
         if pos_type in ["rope", "alibi", "relative"]:
             cfg.attention_type = pos_type
             cfg.pos_encoding_type = pos_type
@@ -178,7 +179,7 @@ def run_positional_experiments():
             cfg.pos_encoding_type = pos_type
 
         # ─────────────────────────────────────
-        # Build loaders (TRAIN ONCE)
+        # Build loaders
         # ─────────────────────────────────────
         train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
 
@@ -187,56 +188,40 @@ def run_positional_experiments():
         optimizer = build_optimizer(model, cfg)
 
         # Train
-        history = train(model, cfg, train_loader, val_loader, optimizer, device)
+        history = train(model, cfg, train_loader,
+                        val_loader, optimizer, device)
 
+        # ─────────────────────────────────────
         # Save dir
+        # ─────────────────────────────────────
         save_dir = f"experiments/positional/{pos_type}_ctx512"
         os.makedirs(save_dir, exist_ok=True)
 
         # ─────────────────────────────────────
-        # Extrapolation
+        # Final evaluation ONLY at 512 (safe)
         # ─────────────────────────────────────
-        results = []
+        final_metrics = evaluate(
+            model, val_loader, device, max_iters=len(val_loader)
+        )
 
-        for test_ctx in TEST_CONTEXTS:
+        final_metrics["pos_type"] = pos_type
+        final_metrics["train_ctx"] = 512
 
-            print(f"Evaluating at ctx={test_ctx}")
+        # Save metrics
+        with open(f"{save_dir}/metrics.json", "w") as f:
+            json.dump(final_metrics, f, indent=4)
 
-            cfg.context_length = test_ctx
+        # Save model
+        torch.save(
+            model.state_dict(),
+            f"{save_dir}/model.pt"
+        )
 
-            # ✅ Correct RoPE interpolation
-            if pos_type == "rope_interp":
-                cfg.rope_scale = test_ctx / 512
-            else:
-                cfg.rope_scale = 1.0
+        print(
+            f"{pos_type} | train_ctx=512 | PPL={final_metrics['perplexity']:.2f}")
 
-            # ✅ ONLY rebuild val loader
-            _, val_loader = build_loaders(cfg, train_tokens, val_tokens)
+    print("\n✅ Training complete for all positional encodings.")
 
-            metrics = evaluate(model, val_loader, device,
-                               max_iters=len(val_loader))
-
-            metrics["pos_type"] = pos_type
-            metrics["train_ctx"] = 512
-            metrics["test_ctx"] = test_ctx
-
-            results.append(metrics)
-            all_results.append(metrics)
-
-        # Save per-method results
-        with open(f"{save_dir}/extrapolation.json", "w") as f:
-            json.dump(results, f, indent=4)
-
-        print_positional_table(results)
-
-    # ─────────────────────────────────────
-    # Final summary
-    # ─────────────────────────────────────
-    print("\n===== ALL POSITIONAL RESULTS =====\n")
-    print_positional_table(all_results)
-
-    with open("experiments/positional/all_results.json", "w") as f:
-        json.dump(all_results, f, indent=4)
 
 if __name__ == "__main__":
 
