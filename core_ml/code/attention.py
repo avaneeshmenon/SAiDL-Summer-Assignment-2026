@@ -286,10 +286,12 @@ class SoftmaxFreeAttention(nn.Module):
         out = torch.einsum("bhnd,bhde,bhn->bhne", q, kv, z)
 
         return self.out(out.transpose(1, 2).reshape(B, T, C))
-    
+
 # ─────────────────────────────────────────────
 # 8. RoPE ATTENTION
 # ─────────────────────────────────────────────
+
+
 class RoPEAttention(nn.Module):
     def __init__(self, cfg, base=10000.0):
         super().__init__()
@@ -301,7 +303,8 @@ class RoPEAttention(nn.Module):
         self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
         self.out = nn.Linear(cfg.d_model, cfg.d_model, bias=False)
 
-        inv_freq = 1.0 / (base ** (torch.arange(0, self.d_head, 2).float() / self.d_head))
+        inv_freq = 1.0 / \
+            (base ** (torch.arange(0, self.d_head, 2).float() / self.d_head))
         self.register_buffer("inv_freq", inv_freq)
 
     def _get_cos_sin(self, T, device):
@@ -333,6 +336,8 @@ class RoPEAttention(nn.Module):
 # ─────────────────────────────────────────────
 # 9. RoPE + INTERPOLATION
 # ─────────────────────────────────────────────
+
+
 class RoPEWithInterpolation(RoPEAttention):
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -343,10 +348,12 @@ class RoPEWithInterpolation(RoPEAttention):
         freqs = torch.outer(t, self.inv_freq)
         emb = torch.cat([freqs, freqs], dim=-1)
         return emb.cos()[None, None, :, :], emb.sin()[None, None, :, :]
-    
+
 # ─────────────────────────────────────────────
 # 10. ALiBi
 # ─────────────────────────────────────────────
+
+
 class ALiBiAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -357,7 +364,8 @@ class ALiBiAttention(nn.Module):
         self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
         self.out = nn.Linear(cfg.d_model, cfg.d_model, bias=False)
 
-        slopes = torch.tensor([2 ** (-8 * i / self.n_heads) for i in range(self.n_heads)])
+        slopes = torch.tensor([2 ** (-8 * i / self.n_heads)
+                              for i in range(self.n_heads)])
         self.register_buffer("slopes", slopes)
 
     def forward(self, x):
@@ -385,10 +393,12 @@ class ALiBiAttention(nn.Module):
         out = attn @ v
 
         return self.out(out.transpose(1, 2).reshape(B, T, C))
-    
+
 # ─────────────────────────────────────────────
 # 11. RELATIVE POSITIONAL ATTENTION
 # ─────────────────────────────────────────────
+
+
 class RelativePositionalAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -399,7 +409,7 @@ class RelativePositionalAttention(nn.Module):
         self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
         self.out = nn.Linear(cfg.d_model, cfg.d_model, bias=False)
 
-        self.max_dist = cfg.context_length
+        self.max_dist = 4096  # or larger than max test ctx
         self.rel_emb = nn.Embedding(self.max_dist, self.d_head)
 
     def forward(self, x):
@@ -427,7 +437,6 @@ class RelativePositionalAttention(nn.Module):
         out = attn @ v
 
         return self.out(out.transpose(1, 2).reshape(B, T, C))
-
 
 
 # ─────────────────────────────────────────────
