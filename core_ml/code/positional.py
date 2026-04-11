@@ -44,6 +44,21 @@ class SinusoidalPositionalEncoding(nn.Module):
     def forward(self, x):
         return self.dropout(x + self.pe[:x.size(1)].unsqueeze(0))
 
+# ─────────────────────────────────────────────────────────────────────────────
+# No-Op Positional Encoding
+# Used for RoPE / ALiBi / Relative
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class NoPositionalEncoding(nn.Module):
+    """
+    Identity module.
+    Used when positional information is handled inside attention.
+    """
+
+    def forward(self, x):
+        return x
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Registry
@@ -52,9 +67,12 @@ class SinusoidalPositionalEncoding(nn.Module):
 POS_ENCODING_REGISTRY = {
     "learned": LearnedPositionalEmbedding,
     "sinusoidal": SinusoidalPositionalEncoding,
-    # "rope": RoPEEncoding,
-    # "alibi": ALiBiEncoding,
-    # "relative": RelativeEncoding,
+
+    # 🔥 These use attention-based positional handling
+    "rope": NoPositionalEncoding,
+    "rope_interp": NoPositionalEncoding,
+    "alibi": NoPositionalEncoding,
+    "relative": NoPositionalEncoding,
 }
 
 
@@ -64,4 +82,10 @@ def build_pos_encoding(cfg):
             f"Unknown pos_encoding_type '{cfg.pos_encoding_type}'. "
             f"Available: {list(POS_ENCODING_REGISTRY.keys())}"
         )
-    return POS_ENCODING_REGISTRY[cfg.pos_encoding_type](cfg)
+    cls = POS_ENCODING_REGISTRY[cfg.pos_encoding_type]
+
+    # NoOp doesn't take cfg
+    if cls is NoPositionalEncoding:
+        return cls()
+    else:
+        return cls(cfg)

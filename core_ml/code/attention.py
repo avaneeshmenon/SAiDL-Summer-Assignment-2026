@@ -286,6 +286,148 @@ class SoftmaxFreeAttention(nn.Module):
         out = torch.einsum("bhnd,bhde,bhn->bhne", q, kv, z)
 
         return self.out(out.transpose(1, 2).reshape(B, T, C))
+    
+# ─────────────────────────────────────────────
+# 8. RoPE ATTENTION
+# ─────────────────────────────────────────────
+class RoPEAttention(nn.Module):
+    def __init__(self, cfg, base=10000.0):
+        super().__init__()
+        self.n_heads = cfg.n_heads
+        self.d_head = cfg.d_model // cfg.n_heads
+        self.d_model = cfg.d_model
+        self.dropout = cfg.dropout
+
+        self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
+        self.out = nn.Linear(cfg.d_model, cfg.d_model, bias=False)
+
+        inv_freq = 1.0 / (base ** (torch.arange(0, self.d_head, 2).float() / self.d_head))
+        self.register_buffer("inv_freq", inv_freq)
+
+    def _get_cos_sin(self, T, device):
+        t = torch.arange(T, device=device)
+        freqs = torch.outer(t, self.inv_freq)
+        emb = torch.cat([freqs, freqs], dim=-1)
+        return emb.cos()[None, None, :, :], emb.sin()[None, None, :, :]
+
+    def _rotate_half(self, x):
+        d = x.shape[-1] // 2
+        return torch.cat([-x[..., d:], x[..., :d]], dim=-1)
+
+    def forward(self, x):
+        B, T, C = x.shape
+        q, k, v = self.qkv(x).chunk(3, dim=-1)
+
+        q = reshape_heads(q, B, T, self.n_heads, self.d_head)
+        k = reshape_heads(k, B, T, self.n_heads, self.d_head)
+        v = reshape_heads(v, B, T, self.n_heads, self.d_head)
+
+        cos, sin = self._get_cos_sin(T, x.device)
+        q = q * cos + self._rotate_half(q) * sin
+        k = k * cos + self._rotate_half(k) * sin
+
+        out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
+
+        return self.out(out.transpose(1, 2).reshape(B, T, C))
+
+# ─────────────────────────────────────────────
+# 9. RoPE + INTERPOLATION
+# ─────────────────────────────────────────────
+class RoPEWithInterpolation(RoPEAttention):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+        self.scale = getattr(cfg, "rope_scale", 1.0)
+
+    def _get_cos_sin(self, T, device):
+        t = torch.arange(T, device=device) * self.scale
+        freqs = torch.outer(t, self.inv_freq)
+        emb = torch.cat([freqs, freqs], dim=-1)
+        return emb.cos()[None, None, :, :], emb.sin()[None, None, :, :]
+    
+# ─────────────────────────────────────────────
+# 10. ALiBi
+# ─────────────────────────────────────────────
+class ALiBiAttention(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.n_heads = cfg.n_heads
+        self.d_head = cfg.d_model // cfg.n_heads
+        self.d_model = cfg.d_model
+
+        self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
+        self.out = nn.Linear(cfg.d_model, cfg.d_model, bias=False)
+
+        slopes = torch.tensor([2 ** (-8 * i / self.n_heads) for i in range(self.n_heads)])
+        self.register_buffer("slopes", slopes)
+
+    def forward(self, x):
+        B, T, C = x.shape
+        q, k, v = self.qkv(x).chunk(3, dim=-1)
+
+        q = reshape_heads(q, B, T, self.n_heads, self.d_head)
+        k = reshape_heads(k, B, T, self.n_heads, self.d_head)
+        v = reshape_heads(v, B, T, self.n_heads, self.d_head)
+
+        scale = self.d_head ** -0.5
+        scores = (q @ k.transpose(-2, -1)) * scale
+
+        pos = torch.arange(T, device=x.device)
+        dist = (pos[None, :] - pos[:, None]).clamp(min=0)
+        bias = -self.slopes[:, None, None] * dist
+        bias = bias.unsqueeze(0)
+
+        scores = scores + bias
+
+        mask = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
+        scores = scores.masked_fill(mask, float("-inf"))
+
+        attn = F.softmax(scores, dim=-1)
+        out = attn @ v
+
+        return self.out(out.transpose(1, 2).reshape(B, T, C))
+    
+# ─────────────────────────────────────────────
+# 11. RELATIVE POSITIONAL ATTENTION
+# ─────────────────────────────────────────────
+class RelativePositionalAttention(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.n_heads = cfg.n_heads
+        self.d_head = cfg.d_model // cfg.n_heads
+        self.d_model = cfg.d_model
+
+        self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
+        self.out = nn.Linear(cfg.d_model, cfg.d_model, bias=False)
+
+        self.max_dist = cfg.context_length
+        self.rel_emb = nn.Embedding(self.max_dist, self.d_head)
+
+    def forward(self, x):
+        B, T, C = x.shape
+        q, k, v = self.qkv(x).chunk(3, dim=-1)
+
+        q = reshape_heads(q, B, T, self.n_heads, self.d_head)
+        k = reshape_heads(k, B, T, self.n_heads, self.d_head)
+        v = reshape_heads(v, B, T, self.n_heads, self.d_head)
+
+        scale = self.d_head ** -0.5
+        scores = (q @ k.transpose(-2, -1)) * scale
+
+        idx = torch.arange(T, device=x.device)
+        dist = (idx[:, None] - idx[None, :]).clamp(0, self.max_dist - 1)
+        rel = self.rel_emb(dist)
+
+        rel_scores = torch.einsum("bhid,ijd->bhij", q, rel)
+        scores = scores + rel_scores
+
+        mask = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
+        scores = scores.masked_fill(mask, float("-inf"))
+
+        attn = F.softmax(scores, dim=-1)
+        out = attn @ v
+
+        return self.out(out.transpose(1, 2).reshape(B, T, C))
+
 
 
 # ─────────────────────────────────────────────
@@ -299,6 +441,11 @@ ATTENTION_REGISTRY = {
     "gqa": GroupedQueryAttention,
     "mqa": MultiQueryAttention,
     "softmax_free": SoftmaxFreeAttention,
+
+    "rope": RoPEAttention,
+    "rope_interp": RoPEWithInterpolation,
+    "alibi": ALiBiAttention,
+    "relative": RelativePositionalAttention,
 }
 
 

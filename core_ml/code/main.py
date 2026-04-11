@@ -207,8 +207,11 @@ def main():
     cfg = TransformerConfig()
 
     # "standard", "sliding_window", "sparse_block", "linear", "gqa", "mqa", "softmax_free"
-    cfg.attention_type = "sliding_window"
-    cfg.context_length = 4096
+    cfg.attention_type = "standard"
+    # "learned", "sinusoidal", "rope", "alibi", "relative"
+    cfg.pos_encoding_type = "learned"
+    cfg.rope_scale = 1.0  # Only used for RoPE variants
+    cfg.context_length = 512
 
     print(f"\nRunning: {cfg.attention_type} | ctx={cfg.context_length}\n")
 
@@ -225,8 +228,8 @@ def main():
     history = train(model, cfg, train_loader, val_loader, optimizer, device)
 
     # ── Folder (dynamic)
-    exp_name = f"{cfg.attention_type}_ctx{cfg.context_length}"
-    save_dir = f"experiments/attention/{exp_name}"
+    exp_name = f"{cfg.pos_encoding_type}_ctx{cfg.context_length}"
+    save_dir = f"experiments/positional/{exp_name}"
     os.makedirs(save_dir, exist_ok=True)
 
     # ── Plot

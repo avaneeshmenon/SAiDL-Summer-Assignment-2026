@@ -1,0 +1,10 @@
+{
+    "val_loss": 5.686236411333084,
+    "perplexity": 294.78209174403736,
+    "throughput": 28225.513929259636,
+    "peak_mem_mb": 8975.133184,
+    "model": "mqa",
+    "context_length": 2048,
+    "params": 42930688,
+    "epoch_time_avg": 102.29047275259991
+}
