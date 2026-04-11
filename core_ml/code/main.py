@@ -207,7 +207,7 @@ def main():
     cfg = TransformerConfig()
 
     # "standard", "sliding_window", "sparse_block", "linear", "gqa", "mqa", "softmax_free"
-    cfg.attention_type = "sparse_block"
+    cfg.attention_type = "standard"
     cfg.context_length = 1024
 
     print(f"\nRunning: {cfg.attention_type} | ctx={cfg.context_length}\n")
@@ -246,7 +246,7 @@ def main():
     axes[2].set_title("LR")
 
     plt.tight_layout()
-    plt.savefig(f"{save_dir}/training_curves.png")
+    plt.savefig(f"{save_dir}/training_curves_{cfg.attention_type}_{cfg.context_length}.png")
     plt.close()
 
     # ── Evaluation
@@ -261,7 +261,7 @@ def main():
     final_metrics["peak_mem_mb"] = max(history["peak_mem_mb"])
 
     # ── Save metrics
-    with open(f"{save_dir}/metrics.json", "w") as f:
+    with open(f"{save_dir}/metrics_{cfg.attention_type}_{cfg.context_length}.json", "w") as f:
         json.dump(final_metrics, f, indent=4)
 
     # ── Generation
@@ -274,11 +274,11 @@ def main():
         top_k=40
     )
 
-    with open(f"{save_dir}/generation.txt", "w") as f:
+    with open(f"{save_dir}/generation_{cfg.attention_type}_{cfg.context_length}.txt", "w") as f:
         f.write(f"Prompt: {prompt}\n\n{generated}")
 
     # ── Save model
-    torch.save(model.state_dict(), f"{save_dir}/model.pt")
+    torch.save(model.state_dict(), f"{save_dir}/model_{cfg.attention_type}_{cfg.context_length}.pt")
 
     # Print table (single run)
     print_results_table([final_metrics])
