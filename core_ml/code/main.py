@@ -207,7 +207,7 @@ def main():
     cfg = TransformerConfig()
 
     # "standard", "sliding_window", "sparse_block", "linear", "gqa", "mqa", "softmax_free"
-    cfg.attention_type = "standard"
+    cfg.attention_type = "sliding_window"
     cfg.context_length = 4096
 
     print(f"\nRunning: {cfg.attention_type} | ctx={cfg.context_length}\n")
