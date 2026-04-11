@@ -207,7 +207,7 @@ def main():
     cfg = TransformerConfig()
 
     # "standard", "sliding_window", "sparse_block", "linear", "gqa", "mqa", "softmax_free"
-    cfg.attention_type = "standard"
+    cfg.attention_type = "sliding_window"
     cfg.context_length = 1024
 
     print(f"\nRunning: {cfg.attention_type} | ctx={cfg.context_length}\n")
@@ -246,7 +246,8 @@ def main():
     axes[2].set_title("LR")
 
     plt.tight_layout()
-    plt.savefig(f"{save_dir}/training_curves_{cfg.attention_type}_{cfg.context_length}.png")
+    plt.savefig(
+        f"{save_dir}/training_curves_{cfg.attention_type}_{cfg.context_length}.png")
     plt.close()
 
     # ── Evaluation
@@ -278,7 +279,8 @@ def main():
         f.write(f"Prompt: {prompt}\n\n{generated}")
 
     # ── Save model
-    torch.save(model.state_dict(), f"{save_dir}/model_{cfg.attention_type}_{cfg.context_length}.pt")
+    torch.save(model.state_dict(),
+               f"{save_dir}/model_{cfg.attention_type}_{cfg.context_length}.pt")
 
     # Print table (single run)
     print_results_table([final_metrics])
