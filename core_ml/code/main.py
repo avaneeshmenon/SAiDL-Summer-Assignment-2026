@@ -144,83 +144,131 @@ def main():
     print("\nSample:\n", generated)
 
 
-def run_positional_experiments():
+# def run_positional_experiments():
+
+#     device = "cuda" if torch.cuda.is_available() else "cpu"
+#     print(f"Using device: {device}")
+
+#     POS_TYPES = ["learned", "sinusoidal", "rope",
+#                  "rope_interp", "alibi", "relative"]
+
+#     # ✅ Load ONCE
+#     enc = load_tokenizer()
+#     train_tokens, val_tokens = tokenize_wikitext2(enc)
+
+#     for pos_type in POS_TYPES:
+
+#         print(f"\n===== Running {pos_type} =====\n")
+
+#         cfg = TransformerConfig()
+
+#         cfg.context_length = 512
+#         cfg.rope_scale = 1.0
+
+#         # ✅ Mapping
+#         if pos_type in ["rope", "alibi", "relative"]:
+#             cfg.attention_type = pos_type
+#             cfg.pos_encoding_type = pos_type
+
+#         elif pos_type == "rope_interp":
+#             cfg.attention_type = "rope"
+#             cfg.pos_encoding_type = "rope"
+
+#         else:
+#             cfg.attention_type = "standard"
+#             cfg.pos_encoding_type = pos_type
+
+#         # ─────────────────────────────────────
+#         # Build loaders
+#         # ─────────────────────────────────────
+#         train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
+
+#         # Model
+#         model = TransformerLM(cfg).to(device)
+#         optimizer = build_optimizer(model, cfg)
+
+#         # Train
+#         history = train(model, cfg, train_loader,
+#                         val_loader, optimizer, device)
+
+#         # ─────────────────────────────────────
+#         # Save dir
+#         # ─────────────────────────────────────
+#         save_dir = f"experiments/positional/{pos_type}_ctx512"
+#         os.makedirs(save_dir, exist_ok=True)
+
+#         # ─────────────────────────────────────
+#         # Final evaluation ONLY at 512 (safe)
+#         # ─────────────────────────────────────
+#         final_metrics = evaluate(
+#             model, val_loader, device, max_iters=len(val_loader)
+#         )
+
+#         final_metrics["pos_type"] = pos_type
+#         final_metrics["train_ctx"] = 512
+
+#         # Save metrics
+#         with open(f"{save_dir}/metrics.json", "w") as f:
+#             json.dump(final_metrics, f, indent=4)
+
+#         # Save model
+#         torch.save(
+#             model.state_dict(),
+#             f"{save_dir}/model.pt"
+#         )
+
+#         print(
+#             f"{pos_type} | train_ctx=512 | PPL={final_metrics['perplexity']:.2f}")
+
+#     print("\n✅ Training complete for all positional encodings.")
+
+
+def run_single_positional():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
-    POS_TYPES = ["learned", "sinusoidal", "rope",
-                 "rope_interp", "alibi", "relative"]
+    # "learned", "sinusoidal", "rope", "rope_interp", "alibi", "relative"
+    POS_TYPE = "learned"   # CHANGE THIS EACH TIME
 
-    # ✅ Load ONCE
+    cfg = TransformerConfig()
+    cfg.context_length = 512
+    cfg.rope_scale = 1.0
+
+    if POS_TYPE in ["rope", "alibi", "relative"]:
+        cfg.attention_type = POS_TYPE
+        cfg.pos_encoding_type = POS_TYPE
+
+    elif POS_TYPE == "rope_interp":
+        cfg.attention_type = "rope"
+        cfg.pos_encoding_type = "rope"
+
+    else:
+        cfg.attention_type = "standard"
+        cfg.pos_encoding_type = POS_TYPE
+
+    # Data
     enc = load_tokenizer()
     train_tokens, val_tokens = tokenize_wikitext2(enc)
+    train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
 
-    for pos_type in POS_TYPES:
+    # Model
+    model = TransformerLM(cfg).to(device)
+    optimizer = build_optimizer(model, cfg)
 
-        print(f"\n===== Running {pos_type} =====\n")
+    # Train
+    history = train(model, cfg, train_loader, val_loader, optimizer, device)
 
-        cfg = TransformerConfig()
+    # Save
+    save_dir = f"experiments/positional/{POS_TYPE}_ctx512"
+    os.makedirs(save_dir, exist_ok=True)
 
-        cfg.context_length = 512
-        cfg.rope_scale = 1.0
+    torch.save(
+        model.state_dict(),
+        f"{save_dir}/model_{cfg.attention_type}_512.pt"
+    )
 
-        # ✅ Mapping
-        if pos_type in ["rope", "alibi", "relative"]:
-            cfg.attention_type = pos_type
-            cfg.pos_encoding_type = pos_type
-
-        elif pos_type == "rope_interp":
-            cfg.attention_type = "rope"
-            cfg.pos_encoding_type = "rope"
-
-        else:
-            cfg.attention_type = "standard"
-            cfg.pos_encoding_type = pos_type
-
-        # ─────────────────────────────────────
-        # Build loaders
-        # ─────────────────────────────────────
-        train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
-
-        # Model
-        model = TransformerLM(cfg).to(device)
-        optimizer = build_optimizer(model, cfg)
-
-        # Train
-        history = train(model, cfg, train_loader,
-                        val_loader, optimizer, device)
-
-        # ─────────────────────────────────────
-        # Save dir
-        # ─────────────────────────────────────
-        save_dir = f"experiments/positional/{pos_type}_ctx512"
-        os.makedirs(save_dir, exist_ok=True)
-
-        # ─────────────────────────────────────
-        # Final evaluation ONLY at 512 (safe)
-        # ─────────────────────────────────────
-        final_metrics = evaluate(
-            model, val_loader, device, max_iters=len(val_loader)
-        )
-
-        final_metrics["pos_type"] = pos_type
-        final_metrics["train_ctx"] = 512
-
-        # Save metrics
-        with open(f"{save_dir}/metrics.json", "w") as f:
-            json.dump(final_metrics, f, indent=4)
-
-        # Save model
-        torch.save(
-            model.state_dict(),
-            f"{save_dir}/model.pt"
-        )
-
-        print(
-            f"{pos_type} | train_ctx=512 | PPL={final_metrics['perplexity']:.2f}")
-
-    print("\n✅ Training complete for all positional encodings.")
+    print(f"\n✅ Saved model for {POS_TYPE}")
 
 
 if __name__ == "__main__":
@@ -228,6 +276,7 @@ if __name__ == "__main__":
     RUN_POSITIONAL = True   # 🔥 toggle this
 
     if RUN_POSITIONAL:
-        run_positional_experiments()
+        # run_positional_experiments()
+        run_single_positional()
     else:
         main()
