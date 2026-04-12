@@ -229,7 +229,7 @@ def run_single_positional():
     print(f"Using device: {device}")
 
     # "learned", "sinusoidal", "rope", "rope_interp", "alibi", "relative"
-    POS_TYPE = "relative"   # CHANGE THIS EACH TIME
+    POS_TYPE = "rope"   # CHANGE THIS EACH TIME
 
     cfg = TransformerConfig()
     cfg.context_length = 512
