@@ -25,24 +25,25 @@ class LearnedPositionalEmbedding(nn.Module):
 class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-
-        self.dropout = nn.Dropout(getattr(cfg, "dropout", 0.0))
-
-        pe = torch.zeros(cfg.context_length, cfg.d_model)
-        pos = torch.arange(0, cfg.context_length).unsqueeze(1).float()
-
-        div = torch.exp(
-            torch.arange(0, cfg.d_model, 2).float()
-            * (-math.log(10000.0) / cfg.d_model)
-        )
-
-        pe[:, 0::2] = torch.sin(pos * div)
-        pe[:, 1::2] = torch.cos(pos * div)
-
-        self.register_buffer("pe", pe)
+        self.d_model = cfg.d_model
+        self.dropout = nn.Dropout(cfg.dropout)
 
     def forward(self, x):
-        return self.dropout(x + self.pe[:x.size(1)].unsqueeze(0))
+        B, T, D = x.shape
+        device = x.device
+
+        # 🔥 Generate positions dynamically
+        pos = torch.arange(T, device=device).unsqueeze(1)
+
+        div_term = torch.exp(
+            torch.arange(0, D, 2, device=device) * (-math.log(10000.0) / D)
+        )
+
+        pe = torch.zeros(T, D, device=device)
+        pe[:, 0::2] = torch.sin(pos * div_term)
+        pe[:, 1::2] = torch.cos(pos * div_term)
+
+        return self.dropout(x + pe.unsqueeze(0))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # No-Op Positional Encoding
