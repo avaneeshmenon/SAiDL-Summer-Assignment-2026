@@ -1,0 +1,11 @@
+[
+    {
+        "val_loss": 5.1282305335998535,
+        "perplexity": 168.71831237471758,
+        "throughput": 32069.22361892998,
+        "peak_mem_mb": 1847.020032,
+        "pos_type": "learned",
+        "train_ctx": 512,
+        "test_ctx": 512
+    }
+]
