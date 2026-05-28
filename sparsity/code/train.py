@@ -86,7 +86,7 @@ def train_lora(cfg, save_dir):
         r=cfg.lora_r,
         lora_alpha=cfg.lora_alpha,
         lora_dropout=cfg.lora_dropout,
-        target_modules=["query_proj", "value_proj"],
+        target_modules = ["query_proj", "key_proj", "value_proj"],
         bias="none",
     )
     model = get_peft_model(base_model, lora_cfg)
@@ -180,7 +180,7 @@ def train_adalora(cfg, save_dir):
         deltaT=cfg.adalora_delta_t,
         lora_alpha=cfg.lora_alpha,
         lora_dropout=cfg.lora_dropout,
-        target_modules=["query_proj", "value_proj"],
+        target_modules = ["query_proj", "key_proj", "value_proj"],
         bias="none",
     )
     model = get_peft_model(base_model, adalora_cfg)

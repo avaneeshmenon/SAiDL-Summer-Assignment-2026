@@ -48,16 +48,16 @@ class SoRALinear(nn.Module):
         self,
         in_features:  int,
         out_features: int,
-        r:            int   = 8,
-        lora_alpha:   int   = 16,
+        r:            int = 8,
+        lora_alpha:   int = 16,
         lora_dropout: float = 0.1,
         lora_lambda:  float = 1e-3,
     ):
         super().__init__()
 
-        self.r           = r
-        self.lora_alpha  = lora_alpha
-        self.scaling     = lora_alpha / r
+        self.r = r
+        self.lora_alpha = lora_alpha
+        self.scaling = lora_alpha / r
         self.lora_lambda = lora_lambda
 
         # ── Frozen base weight ────────────────────────────────────────────
@@ -73,7 +73,8 @@ class SoRALinear(nn.Module):
         self.gate = nn.Parameter(torch.ones(r))
 
         # ── Dropout ───────────────────────────────────────────────────────
-        self.dropout = nn.Dropout(lora_dropout) if lora_dropout > 0 else nn.Identity()
+        self.dropout = nn.Dropout(
+            lora_dropout) if lora_dropout > 0 else nn.Identity()
 
         # ── Init ──────────────────────────────────────────────────────────
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
@@ -84,9 +85,9 @@ class SoRALinear(nn.Module):
         base = F.linear(x, self.weight)
 
         # SoRA adaptation: x A^T diag(g) B^T * scaling
-        ax   = self.dropout(x) @ self.lora_A.T          # (..., r)
-        gax  = ax * self.gate                            # element-wise gate
-        out  = gax @ self.lora_B.T                       # (..., out_features)
+        ax = self.dropout(x) @ self.lora_A.T          # (..., r)
+        gax = ax * self.gate                            # element-wise gate
+        out = gax @ self.lora_B.T                       # (..., out_features)
 
         return base + out * self.scaling
 
@@ -127,9 +128,10 @@ class SoRAModel(nn.Module):
     def __init__(self, base_model: nn.Module, cfg):
         super().__init__()
         self.model = base_model
-        self.cfg   = cfg
+        self.cfg = cfg
 
-        self._inject_sora(cfg.sora_r, cfg.lora_alpha, cfg.lora_dropout, cfg.sora_lambda)
+        self._inject_sora(cfg.sora_r, cfg.lora_alpha,
+                          cfg.lora_dropout, cfg.sora_lambda)
         self._freeze_base()
 
     def _inject_sora(self, r, alpha, dropout, lora_lambda):
@@ -138,19 +140,18 @@ class SoRAModel(nn.Module):
         for name, module in self.model.named_modules():
             # Target attention query and value projections
             if isinstance(module, nn.Linear) and any(
-                k in name for k in ["query_proj", "value_proj", "q_proj", "v_proj",
-                                    "query", "value"]
+                k in name for k in ["query_proj", "key_proj", "value_proj"]
             ):
                 parent_name, child_name = name.rsplit(".", 1)
                 parent = self.model.get_submodule(parent_name)
 
                 sora = SoRALinear(
-                    in_features  = module.in_features,
-                    out_features = module.out_features,
-                    r            = r,
-                    lora_alpha   = alpha,
-                    lora_dropout = dropout,
-                    lora_lambda  = lora_lambda,
+                    in_features=module.in_features,
+                    out_features=module.out_features,
+                    r=r,
+                    lora_alpha=alpha,
+                    lora_dropout=dropout,
+                    lora_lambda=lora_lambda,
                 )
                 # Copy pretrained weights
                 sora.weight.data = module.weight.data.clone()
