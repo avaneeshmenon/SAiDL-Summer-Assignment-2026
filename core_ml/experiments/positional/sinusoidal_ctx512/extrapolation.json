@@ -1,0 +1,29 @@
+[
+    {
+        "val_loss": 6.001513404846191,
+        "perplexity": 404.0398068225456,
+        "throughput": 30794.80855505605,
+        "peak_mem_mb": 1845.971456,
+        "pos_type": "sinusoidal",
+        "train_ctx": 512,
+        "test_ctx": 512
+    },
+    {
+        "val_loss": 6.5237480901902725,
+        "perplexity": 681.1265306850846,
+        "throughput": 30028.173826732767,
+        "peak_mem_mb": 3499.70688,
+        "pos_type": "sinusoidal",
+        "train_ctx": 512,
+        "test_ctx": 1024
+    },
+    {
+        "val_loss": 7.542568683624268,
+        "perplexity": 1886.6700647359073,
+        "throughput": 26070.991327479805,
+        "peak_mem_mb": 6812.224,
+        "pos_type": "sinusoidal",
+        "train_ctx": 512,
+        "test_ctx": 2048
+    }
+]
