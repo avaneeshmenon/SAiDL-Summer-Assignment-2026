@@ -28,7 +28,7 @@ def tokenize_wikitext2(enc):
     """
 
     print("Loading WikiText-2 dataset...")
-    raw = load_dataset("wikitext", "wikitext-2-raw-v1")
+    raw = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
 
     def encode_split(split):
         text = "\n".join(raw[split]["text"])
