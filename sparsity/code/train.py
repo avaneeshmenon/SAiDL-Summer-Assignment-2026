@@ -37,7 +37,7 @@ from methods.sora import SoRAModel
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_cola(cfg, tokenizer):
-    dataset = load_dataset("glue", "cola")
+    dataset = load_dataset("nyu-mll/glue", "cola")
 
     def tokenize(batch):
         return tokenizer(
@@ -48,7 +48,8 @@ def load_cola(cfg, tokenizer):
 
     dataset = dataset.map(tokenize, batched=True)
     dataset = dataset.rename_column("label", "labels")
-    dataset.set_format("torch", columns=["input_ids", "attention_mask", "labels"])
+    dataset.set_format("torch", columns=[
+                       "input_ids", "attention_mask", "labels"])
 
     return dataset["train"], dataset["validation"]
 
@@ -81,12 +82,12 @@ def train_lora(cfg, save_dir):
     )
 
     lora_cfg = LoraConfig(
-        task_type    = TaskType.SEQ_CLS,
-        r            = cfg.lora_r,
-        lora_alpha   = cfg.lora_alpha,
-        lora_dropout = cfg.lora_dropout,
-        target_modules = ["query_proj", "value_proj"],
-        bias         = "none",
+        task_type=TaskType.SEQ_CLS,
+        r=cfg.lora_r,
+        lora_alpha=cfg.lora_alpha,
+        lora_dropout=cfg.lora_dropout,
+        target_modules=["query_proj", "value_proj"],
+        bias="none",
     )
     model = get_peft_model(base_model, lora_cfg)
     model.print_trainable_parameters()
@@ -104,29 +105,29 @@ def train_lora(cfg, save_dir):
     t0 = time.time()
 
     args = TrainingArguments(
-        output_dir              = save_dir,
-        num_train_epochs        = cfg.num_epochs,
-        per_device_train_batch_size = cfg.batch_size,
-        per_device_eval_batch_size  = cfg.batch_size,
-        learning_rate           = cfg.learning_rate,
-        weight_decay            = cfg.weight_decay,
-        warmup_ratio            = cfg.warmup_ratio,
-        evaluation_strategy     = "epoch",
-        save_strategy           = "no",
-        load_best_model_at_end  = False,
-        logging_steps           = 50,
-        fp16                    = torch.cuda.is_available(),
-        report_to               = "none",
+        output_dir=save_dir,
+        num_train_epochs=cfg.num_epochs,
+        per_device_train_batch_size=cfg.batch_size,
+        per_device_eval_batch_size=cfg.batch_size,
+        learning_rate=cfg.learning_rate,
+        weight_decay=cfg.weight_decay,
+        warmup_ratio=cfg.warmup_ratio,
+        evaluation_strategy="epoch",
+        save_strategy="no",
+        load_best_model_at_end=False,
+        logging_steps=50,
+        fp16=torch.cuda.is_available(),
+        report_to="none",
     )
 
     trainer = Trainer(
-        model           = model,
-        args            = args,
-        train_dataset   = train_ds,
-        eval_dataset    = val_ds,
-        tokenizer       = tokenizer,
-        data_collator   = collator,
-        compute_metrics = compute_metrics,
+        model=model,
+        args=args,
+        train_dataset=train_ds,
+        eval_dataset=val_ds,
+        tokenizer=tokenizer,
+        data_collator=collator,
+        compute_metrics=compute_metrics,
     )
 
     trainer.train()
@@ -147,7 +148,8 @@ def train_lora(cfg, save_dir):
     with open(f"{save_dir}/metrics_lora.json", "w") as f:
         json.dump(metrics, f, indent=4)
 
-    print(f"\n  LoRA | MCC={mcc:.4f} | Params={n_trainable:,} | Time={elapsed:.1f}s")
+    print(
+        f"\n  LoRA | MCC={mcc:.4f} | Params={n_trainable:,} | Time={elapsed:.1f}s")
     return metrics
 
 
@@ -170,16 +172,16 @@ def train_adalora(cfg, save_dir):
     )
 
     adalora_cfg = AdaLoraConfig(
-        task_type      = TaskType.SEQ_CLS,
-        init_r         = cfg.adalora_init_r,
-        target_r       = cfg.adalora_target_r,
-        tinit          = cfg.adalora_tinit,
-        tfinal         = cfg.adalora_tfinal,
-        deltaT         = cfg.adalora_delta_t,
-        lora_alpha     = cfg.lora_alpha,
-        lora_dropout   = cfg.lora_dropout,
-        target_modules = ["query_proj", "value_proj"],
-        bias           = "none",
+        task_type=TaskType.SEQ_CLS,
+        init_r=cfg.adalora_init_r,
+        target_r=cfg.adalora_target_r,
+        tinit=cfg.adalora_tinit,
+        tfinal=cfg.adalora_tfinal,
+        deltaT=cfg.adalora_delta_t,
+        lora_alpha=cfg.lora_alpha,
+        lora_dropout=cfg.lora_dropout,
+        target_modules=["query_proj", "value_proj"],
+        bias="none",
     )
     model = get_peft_model(base_model, adalora_cfg)
     model.print_trainable_parameters()
@@ -197,29 +199,29 @@ def train_adalora(cfg, save_dir):
     t0 = time.time()
 
     args = TrainingArguments(
-        output_dir              = save_dir,
-        num_train_epochs        = cfg.num_epochs,
-        per_device_train_batch_size = cfg.batch_size,
-        per_device_eval_batch_size  = cfg.batch_size,
-        learning_rate           = cfg.learning_rate,
-        weight_decay            = cfg.weight_decay,
-        warmup_ratio            = cfg.warmup_ratio,
-        evaluation_strategy     = "epoch",
-        save_strategy           = "no",
-        load_best_model_at_end  = False,
-        logging_steps           = 50,
-        fp16                    = torch.cuda.is_available(),
-        report_to               = "none",
+        output_dir=save_dir,
+        num_train_epochs=cfg.num_epochs,
+        per_device_train_batch_size=cfg.batch_size,
+        per_device_eval_batch_size=cfg.batch_size,
+        learning_rate=cfg.learning_rate,
+        weight_decay=cfg.weight_decay,
+        warmup_ratio=cfg.warmup_ratio,
+        evaluation_strategy="epoch",
+        save_strategy="no",
+        load_best_model_at_end=False,
+        logging_steps=50,
+        fp16=torch.cuda.is_available(),
+        report_to="none",
     )
 
     trainer = Trainer(
-        model           = model,
-        args            = args,
-        train_dataset   = train_ds,
-        eval_dataset    = val_ds,
-        tokenizer       = tokenizer,
-        data_collator   = collator,
-        compute_metrics = compute_metrics,
+        model=model,
+        args=args,
+        train_dataset=train_ds,
+        eval_dataset=val_ds,
+        tokenizer=tokenizer,
+        data_collator=collator,
+        compute_metrics=compute_metrics,
     )
 
     trainer.train()
@@ -244,7 +246,8 @@ def train_adalora(cfg, save_dir):
     with open(f"{save_dir}/metrics_adalora.json", "w") as f:
         json.dump(metrics, f, indent=4)
 
-    print(f"\n  AdaLoRA | MCC={mcc:.4f} | Params={n_trainable:,} | Time={elapsed:.1f}s")
+    print(
+        f"\n  AdaLoRA | MCC={mcc:.4f} | Params={n_trainable:,} | Time={elapsed:.1f}s")
     return metrics
 
 
@@ -284,12 +287,13 @@ def train_sora(cfg, save_dir):
         weight_decay=cfg.weight_decay,
     )
 
-    total_steps  = len(train_loader) * cfg.num_epochs
+    total_steps = len(train_loader) * cfg.num_epochs
     warmup_steps = int(total_steps * cfg.warmup_ratio)
-    scheduler    = get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, warmup_steps, total_steps)
 
     os.makedirs(save_dir, exist_ok=True)
-    t0    = time.time()
+    t0 = time.time()
     scaler = torch.cuda.amp.GradScaler(enabled=(device == "cuda"))
 
     best_mcc = -1.0
@@ -303,7 +307,7 @@ def train_sora(cfg, save_dir):
 
             with torch.cuda.amp.autocast(enabled=(device == "cuda")):
                 outputs = model(**batch)
-                loss    = outputs.loss
+                loss = outputs.loss
 
             scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
@@ -324,18 +328,19 @@ def train_sora(cfg, save_dir):
         all_preds, all_labels = [], []
         with torch.no_grad():
             for batch in val_loader:
-                batch   = {k: v.to(device) for k, v in batch.items()}
+                batch = {k: v.to(device) for k, v in batch.items()}
                 outputs = model(**batch)
-                preds   = outputs.logits.argmax(dim=-1).cpu().numpy()
-                labels  = batch["labels"].cpu().numpy()
+                preds = outputs.logits.argmax(dim=-1).cpu().numpy()
+                labels = batch["labels"].cpu().numpy()
                 all_preds.extend(preds)
                 all_labels.extend(labels)
 
         mcc = compute_mcc(all_preds, all_labels)
         eff_ranks = model.effective_ranks()
-        avg_rank  = np.mean(list(eff_ranks.values())) if eff_ranks else 0
+        avg_rank = np.mean(list(eff_ranks.values())) if eff_ranks else 0
 
-        print(f"  Epoch {epoch} | MCC={mcc:.4f} | Avg effective rank={avg_rank:.1f}")
+        print(
+            f"  Epoch {epoch} | MCC={mcc:.4f} | Avg effective rank={avg_rank:.1f}")
 
         if mcc > best_mcc:
             best_mcc = mcc
