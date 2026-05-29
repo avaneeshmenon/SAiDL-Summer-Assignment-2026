@@ -295,16 +295,23 @@ def train_sora(cfg, save_dir):
         eff_ranks = eff_ranks_effective  # use for final metrics
         avg_rank = avg_rank_effective
 
+        all_gates = []
+
         for module in model.model.modules():
             if hasattr(module, "gate"):
-                g = module.gate.detach().cpu()
+                all_gates.append(module.gate.detach().cpu())
 
-                print(
-                    f" | gate min={g.min():.4f}"
-                    f" mean={g.mean():.4f}"
-                    f" max={g.max():.4f}"
-                )
-                break
+        if len(all_gates) > 0:
+            all_gates = torch.cat(all_gates)
+
+            num_zero = (all_gates.abs() < 1e-4).sum().item()
+
+            print(
+                f" | zero={num_zero}/{all_gates.numel()}"
+                f" min={all_gates.min():.4f}"
+                f" mean={all_gates.mean():.4f}"
+                f" max={all_gates.max():.4f}"
+            )
 
         print(f"  Epoch {epoch} | MCC={mcc:.4f} | "
               f"Exact rank(1e-6)={avg_rank_strict:.1f} | "
