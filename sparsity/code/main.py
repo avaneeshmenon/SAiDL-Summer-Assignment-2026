@@ -149,8 +149,8 @@ def run_part1():
 
 if __name__ == "__main__":
 
-    RUN_PART1 = False
-    RUN_PART2 = True
+    RUN_PART1 = True
+    RUN_PART2 = False
     RUN_PART3 = False
 
     if RUN_PART1:
