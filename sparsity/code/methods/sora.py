@@ -93,7 +93,7 @@ class SoRALinear(nn.Module):
 
     @torch.no_grad()
     def apply_proximal_update(self, lr: float):
-        threshold = self.lora_lambda   # fixed threshold, not lora_lambda * lr
+        threshold = self.lora_lambda * lr    # back to lr-scaled
         self.gate.data = torch.sign(self.gate.data) * \
             torch.clamp(self.gate.data.abs() - threshold, min=0.0)
 
