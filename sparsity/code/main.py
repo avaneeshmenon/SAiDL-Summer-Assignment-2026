@@ -109,8 +109,8 @@ def run_part1():
     all_metrics = []
 
     # ── Toggle which methods to run ──────────────────────────────────────
-    RUN_LORA = True
-    RUN_ADALORA = True
+    RUN_LORA = False
+    RUN_ADALORA = False
     RUN_SORA = True
 
     if RUN_LORA:
