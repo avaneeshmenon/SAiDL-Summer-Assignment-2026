@@ -3,6 +3,14 @@ conv_blocks.py
 ──────────────
 Four plug-and-play 1-D convolutional components for the hybrid Transformer.
 
+CRITICAL: All Conv1D operations use causal (left-only) padding to prevent
+future token leakage. Standard symmetric padding allows each position to
+see kernel_size//2 future tokens, which causes catastrophically low PPL
+by leaking ground truth information into predictions.
+
+Causal padding: pad (kernel_size - 1) on the LEFT, 0 on the RIGHT.
+This ensures position t only sees positions <= t.
+
 Design 1 – Conv1DBefore
     A depthwise-separable Conv1D applied *before* the attention sublayer.
     Acts as a local n-gram feature extractor that feeds richer tokens into
@@ -16,8 +24,7 @@ Design 2 – InterleavedConvBlock
 
 Design 3 – DepthwiseSeparableReplace
     A drop-in module that *replaces the attention sublayer* for a configurable
-    fraction of layers (default: the first half).  This is the depthwise
-    separable 1-D convolution option from the assignment.
+    fraction of layers (default: the first half).
 
 Design 4 – GatedConvFFN
     Replaces the standard FFN with a Gated Convolutional Feed-Forward Network.
@@ -25,12 +32,6 @@ Design 4 – GatedConvFFN
         gate  = sigmoid(Conv1d(x))
         value = GELU(Conv1d(x))
         out   = gate * value   → projected back to d_model
-    This is analogous to the gated linear units used in modern LLMs.
-
-Usage
-──────
-All modules take (B, T, C) tensors and return (B, T, C) tensors so they slot
-seamlessly into the existing TransformerBlock / TransformerLM pipeline.
 """
 
 import torch
@@ -44,30 +45,35 @@ import torch.nn.functional as F
 
 class DepthwiseSeparableConv1d(nn.Module):
     """
-    Depthwise + pointwise Conv1D.
-    Input / output: (B, T, C)  [channel-last, as used throughout the codebase]
-    Internally transposes to (B, C, T) for Conv1D, then transposes back.
+    Causal depthwise + pointwise Conv1D.
+    Input / output: (B, T, C)  [channel-last]
+
+    Uses left-only padding of (kernel_size - 1) to ensure causality:
+    position t sees only positions [t - (kernel_size-1), ..., t].
     """
 
     def __init__(self, d_model: int, kernel_size: int = 3, dropout: float = 0.0):
         super().__init__()
-        pad = kernel_size // 2  # 'same' padding for odd kernels
-        self.dw = nn.Conv1d(
+        self.causal_pad = kernel_size - 1   # pad left only
+
+        self.dw  = nn.Conv1d(
             d_model, d_model, kernel_size,
-            padding=pad, groups=d_model, bias=False
+            padding=0,              # no built-in padding — we do it manually
+            groups=d_model, bias=False
         )
-        self.pw = nn.Conv1d(d_model, d_model, 1, bias=False)
-        self.act = nn.GELU()
+        self.pw   = nn.Conv1d(d_model, d_model, 1, bias=False)
+        self.act  = nn.GELU()
         self.drop = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (B, T, C)
-        h = x.transpose(1, 2)          # (B, C, T)
-        h = self.dw(h)
-        h = self.pw(h)
+        h = x.transpose(1, 2)                      # (B, C, T)
+        h = F.pad(h, (self.causal_pad, 0))         # pad left only → causal
+        h = self.dw(h)                             # (B, C, T)
+        h = self.pw(h)                             # (B, C, T)
         h = self.act(h)
         h = self.drop(h)
-        return h.transpose(1, 2)       # (B, T, C)
+        return h.transpose(1, 2)                   # (B, T, C)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -77,15 +83,12 @@ class DepthwiseSeparableConv1d(nn.Module):
 class Conv1DBefore(nn.Module):
     """
     Prepended to every attention sublayer.
-    Flow:  x → DepthwiseSepConv → residual add → [then normal attn + FFN]
-
-    The TransformerBlock checks cfg.conv_type == "conv_before_attn" and
-    instantiates this module; forward() is called at the top of the block.
+    Flow:  x → CausalDWSConv → residual add → [then normal attn + FFN]
     """
 
     def __init__(self, cfg):
         super().__init__()
-        self.ln = nn.LayerNorm(cfg.d_model)
+        self.ln   = nn.LayerNorm(cfg.d_model)
         self.conv = DepthwiseSeparableConv1d(
             cfg.d_model,
             kernel_size=getattr(cfg, "conv_kernel_size", 3),
@@ -97,31 +100,29 @@ class Conv1DBefore(nn.Module):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Design 2 – Interleaved Conv block (replaces TransformerBlock at even layers)
+# Design 2 – Interleaved Conv block
 # ─────────────────────────────────────────────────────────────────────────────
 
 class InterleavedConvBlock(nn.Module):
     """
     Pure-conv block used on every other layer when conv_type == "interleaved".
-    Mirrors the pre-LN TransformerBlock structure but replaces attention with
-    a depthwise-separable convolution.
+    Replaces attention with causal depthwise-separable convolution.
 
     Layer structure:
-        x = x + DWSConv(LN(x))       ← local context (replaces attention)
-        x = x + FFN(LN(x))           ← position-wise transform
+        x = x + CausalDWSConv(LN(x))
+        x = x + FFN(LN(x))
     """
 
     def __init__(self, cfg):
         super().__init__()
-        self.ln1 = nn.LayerNorm(cfg.d_model)
+        self.ln1  = nn.LayerNorm(cfg.d_model)
         self.conv = DepthwiseSeparableConv1d(
             cfg.d_model,
             kernel_size=getattr(cfg, "conv_kernel_size", 3),
             dropout=cfg.dropout,
         )
-        self.ln2 = nn.LayerNorm(cfg.d_model)
-        # Standard FFN reused
-        self.ff = nn.Sequential(
+        self.ln2  = nn.LayerNorm(cfg.d_model)
+        self.ff   = nn.Sequential(
             nn.Linear(cfg.d_model, cfg.d_ff),
             nn.GELU(),
             nn.Linear(cfg.d_ff, cfg.d_model),
@@ -140,13 +141,9 @@ class InterleavedConvBlock(nn.Module):
 
 class DepthwiseSeparableReplace(nn.Module):
     """
-    Used when conv_type == "depthwise_subset".
     Replaces the attention sublayer in the first (n_layers // 2) blocks.
-    The containing TransformerBlock instantiates this instead of build_attention().
-
-    The FFN sublayer is kept unchanged, so these 'conv layers' still do:
-        x = x + DWSConv(LN(x))
-        x = x + FFN(LN(x))
+    TransformerBlock wraps this in LN + residual, so forward() just
+    returns the causal conv output.
     """
 
     def __init__(self, cfg):
@@ -158,8 +155,6 @@ class DepthwiseSeparableReplace(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # TransformerBlock already wraps this in LN + residual,
-        # so just return the transformed tensor.
         return self.conv(x)
 
 
@@ -169,36 +164,34 @@ class DepthwiseSeparableReplace(nn.Module):
 
 class GatedConvFFN(nn.Module):
     """
-    Replaces the standard MLP FFN when conv_type == "gated_conv_ff".
+    Replaces the standard MLP FFN with a causal Gated Conv FFN.
 
-    Architecture (GLU-style with convolution):
-        h_gate  = sigmoid( Conv1d_expand(x) )
-        h_value = GELU(    Conv1d_expand(x) )
-        h       = h_gate * h_value            ← gated activation
-        out     = Conv1d_project(h)           ← project back to d_model
+    Architecture (GLU-style):
+        h_gate  = sigmoid( CausalConv1d_expand(x) )
+        h_value = GELU(    CausalConv1d_expand(x) )
+        h       = h_gate * h_value
+        out     = Conv1d_project(h)
 
-    The two Conv1d_expand projections are fused into one 2*d_ff projection
-    then split, matching the efficiency of GeLU-gated variants.
-    Kernel size 1 gives a pointwise conv equivalent to a linear layer;
-    kernel size 3 adds local context inside the FFN.
+    Both the expand conv and project conv are causal.
     """
 
     def __init__(self, cfg):
         super().__init__()
         k = getattr(cfg, "conv_kernel_size", 3)
-        pad = k // 2
+        self.causal_pad = k - 1                    # left-only padding
 
-        # Fused gate + value projection  (d_model → 2 * d_ff)
-        self.expand = nn.Conv1d(
-            cfg.d_model, 2 * cfg.d_ff, k, padding=pad, bias=False
+        # Fused gate + value projection (d_model → 2 * d_ff)
+        self.expand  = nn.Conv1d(
+            cfg.d_model, 2 * cfg.d_ff, k,
+            padding=0, bias=False                  # manual causal padding
         )
-        # Project back  (d_ff → d_model)
+        # Project back (d_ff → d_model) — kernel=1 is always causal
         self.project = nn.Conv1d(cfg.d_ff, cfg.d_model, 1, bias=False)
-        self.drop = nn.Dropout(cfg.dropout)
+        self.drop    = nn.Dropout(cfg.dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (B, T, C)
-        h = x.transpose(1, 2)                    # (B, C, T)
+        h = x.transpose(1, 2)                     # (B, C, T)
+        h = F.pad(h, (self.causal_pad, 0))        # pad left only → causal
         h = self.expand(h)                        # (B, 2*d_ff, T)
         gate, value = h.chunk(2, dim=1)           # each (B, d_ff, T)
         h = torch.sigmoid(gate) * F.gelu(value)  # gated activation
@@ -212,9 +205,9 @@ class GatedConvFFN(nn.Module):
 # ─────────────────────────────────────────────────────────────────────────────
 
 CONV_REGISTRY = {
-    "conv_before_attn":   Conv1DBefore,
-    "interleaved":        InterleavedConvBlock,   # used at the model level
-    "depthwise_subset":   DepthwiseSeparableReplace,
-    "gated_conv_ff":      GatedConvFFN,
-    "none":               None,
+    "conv_before_attn": Conv1DBefore,
+    "interleaved":      InterleavedConvBlock,
+    "depthwise_subset": DepthwiseSeparableReplace,
+    "gated_conv_ff":    GatedConvFFN,
+    "none":             None,
 }
