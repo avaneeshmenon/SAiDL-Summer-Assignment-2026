@@ -224,11 +224,6 @@ def train_sora(cfg, save_dir):
     n_trainable = model.count_trainable_parameters()
     print(f"  Trainable parameters: {n_trainable:,}")
 
-    # DEBUG — remove after checking
-    for name, param in model.named_parameters():
-        if param.requires_grad:
-            print(f"  TRAINABLE: {name}")
-
     collator = DataCollatorWithPadding(tokenizer)
     train_loader = DataLoader(
         train_ds, batch_size=cfg.batch_size, shuffle=True, collate_fn=collator
