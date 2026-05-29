@@ -232,11 +232,24 @@ def train_sora(cfg, save_dir):
         val_ds, batch_size=cfg.batch_size, shuffle=False, collate_fn=collator
     )
 
-    optimizer = torch.optim.AdamW(
-        [p for p in model.parameters() if p.requires_grad],
-        lr=cfg.learning_rate,
-        weight_decay=cfg.weight_decay,
-    )
+    # Separate gate parameters from other trainable parameters
+    gate_params = []
+    other_params = []
+    for name, p in model.named_parameters():
+        if not p.requires_grad:
+            continue
+        if "gate" in name:
+            gate_params.append(p)
+        else:
+            other_params.append(p)
+
+    # Assign specific learning rates to each group
+    optimizer = torch.optim.AdamW([
+        {"params": other_params, "lr": cfg.learning_rate,
+            "weight_decay": cfg.weight_decay},
+        {"params": gate_params,  "lr": cfg.sora_lr_gate,
+            "weight_decay": 0.0},  # Gates rarely use weight decay
+    ])
 
     total_steps = len(train_loader) * cfg.num_epochs
     warmup_steps = int(total_steps * cfg.warmup_ratio)
@@ -271,7 +284,8 @@ def train_sora(cfg, save_dir):
             scaler.update()
             scheduler.step()
 
-            model.apply_proximal_updates(cfg.learning_rate)
+            current_gate_lr = optimizer.param_groups[1]['lr']
+            model.apply_proximal_updates(current_gate_lr)
 
         model.eval()
         all_preds, all_labels = [], []
