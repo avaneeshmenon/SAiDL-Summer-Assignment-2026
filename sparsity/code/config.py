@@ -31,7 +31,7 @@ class SparsityConfig:
 
     # ── SoRA ─────────────────────────────────────────────────────────────
     sora_r:         int = 8
-    sora_lambda:    float = 0.1
+    sora_lambda:    float = 10
     sora_lr_gate:   float = 1e-4
 
     # ── Paths ─────────────────────────────────────────────────────────────
