@@ -11,13 +11,13 @@ Parts:
 Toggle which part to run at the bottom.
 """
 
-from train import train_lora, train_adalora, train_sora
 from config import SparsityConfig
 import os
 import json
 import torch
 import matplotlib.pyplot as plt
 import matplotlib
+from part2 import run_part2
 matplotlib.use("Agg")
 
 
@@ -101,6 +101,7 @@ def plot_comparison(metrics_list, save_dir):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_part1():
+    from train import train_lora, train_adalora, train_sora
     cfg = SparsityConfig()
     save_dir = "experiments/part1"
     os.makedirs(save_dir, exist_ok=True)
@@ -108,8 +109,8 @@ def run_part1():
     all_metrics = []
 
     # ── Toggle which methods to run ──────────────────────────────────────
-    RUN_LORA = True   # already done
-    RUN_ADALORA = True   # already done
+    RUN_LORA = False
+    RUN_ADALORA = False
     RUN_SORA = True
 
     if RUN_LORA:
@@ -148,13 +149,13 @@ def run_part1():
 
 if __name__ == "__main__":
 
-    RUN_PART1 = True
-    RUN_PART2 = False
+    RUN_PART1 = False
+    RUN_PART2 = True
     RUN_PART3 = False
 
     if RUN_PART1:
         run_part1()
     elif RUN_PART2:
-        pass  # added next
+        run_part2()
     elif RUN_PART3:
-        pass  # added after part 2
+        pass

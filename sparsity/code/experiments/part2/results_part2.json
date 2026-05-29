@@ -1,0 +1,56 @@
+{
+    "numpy_vs_pytorch": {
+        "gate_np_final": [
+            0.9997999998076258,
+            0.9998000001119254,
+            0.9997999999223496,
+            0.9998000002246146
+        ],
+        "gate_pt_final": [
+            0.9997997283935547,
+            0.9997997283935547,
+            0.9997997283935547,
+            0.9997997283935547
+        ],
+        "max_diff": 2.7183105988370926e-07,
+        "match": true
+    },
+    "sgd_vs_proximal": {
+        "sgd_final_gates": [
+            0.49999999999999956,
+            0.029999999999999583,
+            0.0009999999999999098,
+            0.0009999999999999584,
+            0.0009999999999999966
+        ],
+        "prox_final_gates": [
+            0.49999999999999956,
+            0.029999999999999583,
+            0.0,
+            0.0,
+            0.0
+        ],
+        "sgd_exact_zeros": 0,
+        "prox_exact_zeros": 3,
+        "prox_zero_steps": {
+            "2": 107,
+            "3": 51,
+            "4": 13
+        },
+        "subgradient_analysis": {
+            "\u2202=-1": 0.0,
+            "\u2202=0": 0.0,
+            "\u2202=+1": 0.0
+        }
+    },
+    "part1_comparison": {
+        "sgd_final_rank": 8,
+        "prox_final_rank": 8
+    },
+    "mathematical_summary": {
+        "proximal_update": "g_temp = g - lr*\u2202L0/\u2202g; g = sign(g_temp)*max(|g_temp| - lr*\u03bb, 0)",
+        "sgd_l1_update": "g = g - lr * (\u2202L0/\u2202g + \u03bb * sign(g))",
+        "key_difference": "Proximal guarantees exact zeros via soft-thresholding. SGD only shrinks asymptotically.",
+        "subgradient_note": "Choice of subgradient at g=0 affects direction of movement but not the sparsity guarantee."
+    }
+}

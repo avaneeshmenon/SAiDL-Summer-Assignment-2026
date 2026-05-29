@@ -97,9 +97,8 @@ class SoRALinear(nn.Module):
         self.gate.data = torch.sign(self.gate.data) * \
             torch.clamp(self.gate.data.abs() - threshold, min=0.0)
 
-    def effective_rank(self) -> int:
-        """Number of non-zero gate values = effective rank."""
-        return (self.gate.abs() > 1e-6).sum().item()
+    def effective_rank(self, eps=1e-3):
+        return (self.gate.data.abs() > eps).sum().item()
 
     def trainable_parameters(self) -> int:
         return (
@@ -173,12 +172,11 @@ class SoRAModel(nn.Module):
             if isinstance(module, SoRALinear):
                 module.apply_proximal_update(lr)
 
-    def effective_ranks(self) -> dict:
-        """Returns effective rank for each SoRALinear layer."""
+    def effective_ranks(self, eps=1e-3):
         ranks = {}
         for name, module in self.model.named_modules():
             if isinstance(module, SoRALinear):
-                ranks[name] = module.effective_rank()
+                ranks[name] = (module.gate.data.abs() > eps).sum().item()
         return ranks
 
     def count_trainable_parameters(self) -> int:
