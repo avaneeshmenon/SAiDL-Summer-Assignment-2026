@@ -271,8 +271,7 @@ def train_sora(cfg, save_dir):
             scaler.update()
             scheduler.step()
 
-            current_lr = scheduler.get_last_lr()[0]
-            model.apply_proximal_updates(current_lr)
+            model.apply_proximal_updates(cfg.learning_rate)
 
         model.eval()
         all_preds, all_labels = [], []
@@ -287,16 +286,19 @@ def train_sora(cfg, save_dir):
 
         mcc = compute_mcc(all_preds, all_labels)
         # Both strict (1e-6) and effective (1e-3) rank
-        eff_ranks_strict    = model.effective_ranks(eps=1e-6)
+        eff_ranks_strict = model.effective_ranks(eps=1e-6)
         eff_ranks_effective = model.effective_ranks(eps=1e-3)
-        avg_rank_strict     = float(np.mean(list(eff_ranks_strict.values()))) if eff_ranks_strict else 0.0
-        avg_rank_effective  = float(np.mean(list(eff_ranks_effective.values()))) if eff_ranks_effective else 0.0
+        avg_rank_strict = float(
+            np.mean(list(eff_ranks_strict.values()))) if eff_ranks_strict else 0.0
+        avg_rank_effective = float(
+            np.mean(list(eff_ranks_effective.values()))) if eff_ranks_effective else 0.0
         eff_ranks = eff_ranks_effective  # use for final metrics
         avg_rank = avg_rank_effective
 
         print(f"  Epoch {epoch} | MCC={mcc:.4f} | "
               f"Exact rank(1e-6)={avg_rank_strict:.1f} | "
               f"Effective rank(1e-3)={avg_rank_effective:.1f}")
+
         if mcc > best_mcc:
             best_mcc = mcc
 
