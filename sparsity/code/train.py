@@ -75,7 +75,7 @@ def _make_trainer(model, args, train_ds, val_ds, tokenizer, collator, compute_me
         args=args,
         train_dataset=train_ds,
         eval_dataset=val_ds,
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
         data_collator=collator,
         compute_metrics=compute_metrics,
     )
