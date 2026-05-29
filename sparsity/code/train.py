@@ -245,7 +245,7 @@ def train_sora(cfg, save_dir):
 
     os.makedirs(save_dir, exist_ok=True)
     t0 = time.time()
-    scaler = torch.amp.GradScaler("cuda", enabled=(device == "cuda"))
+    scaler = torch.cuda.amp.GradScaler(enabled=(device == "cuda"))
 
     best_mcc = -1.0
     eff_ranks = {}
@@ -257,7 +257,7 @@ def train_sora(cfg, save_dir):
             batch = {k: v.to(device) for k, v in batch.items()}
             optimizer.zero_grad()
 
-            with torch.amp.autocast("cuda", enabled=(device == "cuda")):
+            with torch.cuda.amp.autocast(enabled=(device == "cuda")):
                 outputs = model(**batch)
                 loss = outputs.loss
 
