@@ -284,8 +284,7 @@ def train_sora(cfg, save_dir):
             scaler.update()
             scheduler.step()
 
-            current_gate_lr = optimizer.param_groups[1]['lr']
-            model.apply_proximal_updates(current_gate_lr)
+            model.apply_proximal_updates(cfg.learning_rate)
 
         model.eval()
         all_preds, all_labels = [], []
