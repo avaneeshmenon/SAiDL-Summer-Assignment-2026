@@ -59,7 +59,7 @@ def _make_training_args(cfg, save_dir):
         learning_rate=cfg.learning_rate,
         weight_decay=cfg.weight_decay,
         warmup_steps=100,
-        eval_strategy="epoch",
+        evaluation_strategy="epoch",
         save_strategy="no",
         load_best_model_at_end=False,
         logging_steps=50,
