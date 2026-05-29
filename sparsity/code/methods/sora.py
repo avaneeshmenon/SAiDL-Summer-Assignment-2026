@@ -93,13 +93,7 @@ class SoRALinear(nn.Module):
 
     @torch.no_grad()
     def apply_proximal_update(self, lr: float):
-        """
-        Soft-thresholding proximal update for the gate parameter.
-        Called after optimizer.step() to induce sparsity.
-
-        prox_{λlr}(g) = sign(g) * max(|g| - λ*lr, 0)
-        """
-        threshold = self.lora_lambda * lr
+        threshold = self.lora_lambda   # fixed threshold, not lora_lambda * lr
         self.gate.data = torch.sign(self.gate.data) * \
             torch.clamp(self.gate.data.abs() - threshold, min=0.0)
 

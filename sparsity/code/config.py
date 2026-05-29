@@ -31,8 +31,8 @@ class SparsityConfig:
 
     # ── SoRA ─────────────────────────────────────────────────────────────
     sora_r:         int   = 8
-    sora_lambda:    float = 1e-6
-    sora_lr_gate:   float = 1e-3
+    sora_lambda:    float = 1e-3
+    sora_lr_gate:   float = 1e-4
 
     # ── Paths ─────────────────────────────────────────────────────────────
     data_dir:    str = "glue_data"
