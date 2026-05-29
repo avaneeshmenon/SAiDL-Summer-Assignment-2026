@@ -166,7 +166,7 @@ class SoRAModel(nn.Module):
     def _freeze_base(self):
         """Freeze everything except LoRA/gate parameters."""
         for name, param in self.model.named_parameters():
-            if not any(k in name for k in ["lora_A", "lora_B", "gate", "classifier"]):
+            if not any(k in name for k in ["lora_A", "lora_B", "gate", "classifier", "pooler"]):
                 param.requires_grad = False
 
     def forward(self, **kwargs):
