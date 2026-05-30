@@ -639,6 +639,9 @@ def train_sora_mamba(cfg, save_dir):
         r=cfg.sora_r, alpha=cfg.lora_alpha,
         dropout=cfg.lora_dropout, lora_lambda=cfg.sora_lambda,
     )
+
+    model = model.to(device)
+
     print(
         f"  SoRA: replaced {replaced} linear layers (targets: {target_modules})")
     freeze_base(model)
