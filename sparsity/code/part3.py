@@ -893,9 +893,9 @@ def run_part3(cfg):
     except FileNotFoundError:
         print("  Part 1 SoRA metrics not found — skipping baseline comparison")
 
-    RUN_XLSTM_BASELINE = True
+    RUN_XLSTM_BASELINE = False
 
-    RUN_XLSTM = False
+    RUN_XLSTM = True
 
     RUN_MAMBA = False
 
