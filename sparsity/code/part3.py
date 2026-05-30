@@ -115,7 +115,7 @@ def inject_sora(model: nn.Module, target_modules: list[str],
 def freeze_base(model: nn.Module):
     """Freeze all params except SoRA trainable ones and classifier head."""
     for name, param in model.named_parameters():
-        if any(k in name for k in ["lora_A", "lora_B", "gate", "classifier", "head"]):
+        if any(k in name for k in ["lora_A", "lora_B", "gate", "classifier", "head", "embed", "norm"]):
             param.requires_grad = True
         else:
             param.requires_grad = False
@@ -243,7 +243,14 @@ def build_xlstm_backbone(cfg):
 
     except ImportError:
         print("  xlstm package not found — using minimal mLSTM implementation")
-        return build_minimal_mlstm(cfg), cfg.xlstm_d_model, ["Wz", "Wi", "Wf", "Wo", "proj_out"]
+        return build_minimal_mlstm(cfg), cfg.xlstm_d_model, [
+            "Wq",
+            "Wk",
+            "Wv",
+            "Wi",
+            "Wf",
+            "proj_out"
+        ]
 
 
 def build_minimal_mlstm(cfg):
