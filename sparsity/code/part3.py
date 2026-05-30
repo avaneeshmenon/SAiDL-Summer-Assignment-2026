@@ -899,12 +899,12 @@ def run_part3(cfg):
 
     RUN_MAMBA = False
 
-    if RUN_XLSTM_BASELINE:
-        m_xlstm_base = train_xlstm_baseline(cfg, save_dir)
-    else:
-        with open(f"{save_dir}/metrics_xlstm_baseline.json") as f:
-            m_xlstm_base = json.load(f)
-    all_metrics.append(m_xlstm_base)
+    # if RUN_XLSTM_BASELINE:
+    #     m_xlstm_base = train_xlstm_baseline(cfg, save_dir)
+    # else:
+    #     with open(f"{save_dir}/metrics_xlstm_baseline.json") as f:
+    #         m_xlstm_base = json.load(f)
+    # all_metrics.append(m_xlstm_base)
 
     if RUN_XLSTM:
         m_xlstm = train_sora_xlstm(cfg, save_dir)
