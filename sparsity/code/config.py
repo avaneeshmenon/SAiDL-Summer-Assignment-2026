@@ -12,7 +12,7 @@ class SparsityConfig:
     max_length:     int = 128
     batch_size:     int = 16
     num_epochs:     int = 10
-    learning_rate:  float = 2e-4
+    learning_rate:  float = 1e-3
     weight_decay:   float = 0.01
     warmup_ratio:   float = 0.06
     max_grad_norm:  float = 1.0
@@ -38,7 +38,7 @@ class SparsityConfig:
     xlstm_d_model:  int = 256   # hidden dim (small — trained from scratch)
     xlstm_n_layers: int = 4
     vocab_size:     int = 50265  # set dynamically from tokenizer in part3.py
- 
+
     # ── Mamba (Part 3) ───────────────────────────────────────────────────
     mamba_d_model:  int = 256   # hidden dim
     mamba_n_layers: int = 4
