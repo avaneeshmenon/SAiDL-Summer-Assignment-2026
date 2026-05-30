@@ -613,6 +613,146 @@ def train_sora_xlstm(cfg, save_dir):
     return metrics
 
 
+def train_xlstm_baseline(cfg, save_dir):
+    print("\n" + "=" * 50)
+    print("  Training: xLSTM Baseline")
+    print("=" * 50)
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
+    cfg.vocab_size = tokenizer.vocab_size
+    train_ds, val_ds = load_cola(cfg, tokenizer)
+
+    collator = DataCollatorWithPadding(tokenizer)
+
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        collate_fn=collator,
+    )
+
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=cfg.batch_size,
+        shuffle=False,
+        collate_fn=collator,
+    )
+
+    backbone, d_model, _ = build_xlstm_backbone(cfg)
+
+    model = SequenceClassifier(
+        backbone,
+        d_model,
+        num_labels=cfg.num_labels,
+    ).to(device)
+
+    # Train EVERYTHING
+    for p in model.parameters():
+        p.requires_grad = True
+
+    n_trainable = sum(
+        p.numel() for p in model.parameters() if p.requires_grad
+    )
+
+    print(f"  Trainable parameters: {n_trainable:,}")
+
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=cfg.learning_rate,
+        weight_decay=cfg.weight_decay,
+    )
+
+    total_steps = len(train_loader) * cfg.num_epochs
+    warmup_steps = int(total_steps * cfg.warmup_ratio)
+
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer,
+        warmup_steps,
+        total_steps,
+    )
+
+    scaler = torch.cuda.amp.GradScaler(enabled=(device == "cuda"))
+
+    best_mcc = -1.0
+    t0 = time.time()
+
+    for epoch in range(1, cfg.num_epochs + 1):
+
+        model.train()
+
+        for batch in train_loader:
+            batch = {k: v.to(device) for k, v in batch.items()}
+
+            optimizer.zero_grad()
+
+            with torch.cuda.amp.autocast(enabled=(device == "cuda")):
+                outputs = model(**batch)
+                loss = outputs.loss
+
+            scaler.scale(loss).backward()
+
+            scaler.unscale_(optimizer)
+
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(),
+                cfg.max_grad_norm,
+            )
+
+            scaler.step(optimizer)
+            scaler.update()
+            scheduler.step()
+
+        # Validation
+        model.eval()
+
+        all_preds = []
+        all_labels = []
+
+        with torch.no_grad():
+            for batch in val_loader:
+                batch = {k: v.to(device) for k, v in batch.items()}
+
+                outputs = model(**batch)
+
+                preds = outputs.logits.argmax(dim=-1).cpu().numpy()
+                labels = batch["labels"].cpu().numpy()
+
+                all_preds.extend(preds)
+                all_labels.extend(labels)
+
+        mcc = compute_mcc(all_preds, all_labels)
+
+        print(
+            f"  [xLSTM Baseline] Epoch {epoch} | MCC={mcc:.4f}"
+        )
+
+        if mcc > best_mcc:
+            best_mcc = mcc
+
+    elapsed = time.time() - t0
+
+    metrics = {
+        "method": "xlstm_baseline",
+        "mcc": best_mcc,
+        "trainable_params": n_trainable,
+        "train_time_sec": elapsed,
+    }
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    with open(f"{save_dir}/metrics_xlstm_baseline.json", "w") as f:
+        json.dump(metrics, f, indent=4)
+
+    print(
+        f"\n  xLSTM Baseline | MCC={best_mcc:.4f} | "
+        f"Params={n_trainable:,} | Time={elapsed:.1f}s"
+    )
+
+    return metrics
+
+
 def train_sora_mamba(cfg, save_dir):
     print("\n" + "=" * 50)
     print("  Training: SoRA-Mamba")
@@ -746,8 +886,18 @@ def run_part3(cfg):
     except FileNotFoundError:
         print("  Part 1 SoRA metrics not found — skipping baseline comparison")
 
-    RUN_XLSTM = True
-    RUN_MAMBA = True
+    RUN_XLSTM_BASELINE = True
+
+    RUN_XLSTM = False
+
+    RUN_MAMBA = False
+
+    if RUN_XLSTM_BASELINE:
+        m_xlstm_base = train_xlstm_baseline(cfg, save_dir)
+    else:
+        with open(f"{save_dir}/metrics_xlstm_baseline.json") as f:
+            m_xlstm_base = json.load(f)
+    all_metrics.append(m_xlstm_base)
 
     if RUN_XLSTM:
         m_xlstm = train_sora_xlstm(cfg, save_dir)
