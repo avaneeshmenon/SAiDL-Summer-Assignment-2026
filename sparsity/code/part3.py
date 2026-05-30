@@ -152,7 +152,8 @@ def load_cola(cfg, tokenizer):
 
     dataset = dataset.map(tokenize, batched=True)
     dataset = dataset.rename_column("label", "labels")
-    dataset.set_format("torch", columns=["input_ids", "attention_mask", "labels"])
+    dataset.set_format("torch", columns=[
+                       "input_ids", "attention_mask", "labels"])
     return dataset["train"], dataset["validation"]
 
 
@@ -177,7 +178,7 @@ class SequenceClassifier(nn.Module):
                  dropout: float = 0.1):
         super().__init__()
         self.backbone = backbone
-        self.dropout  = nn.Dropout(dropout)
+        self.dropout = nn.Dropout(dropout)
         self.classifier = nn.Linear(d_model, num_labels)
 
     def forward(self, input_ids, attention_mask=None, labels=None):
@@ -303,7 +304,8 @@ def build_minimal_mlstm(cfg):
 
                 # retrieve
                 h_num = torch.bmm(C, q.unsqueeze(2)).squeeze(2)   # (B, D)
-                denom = torch.clamp((n * q).sum(-1, keepdim=True).abs(), min=1.0)
+                denom = torch.clamp(
+                    (n * q).sum(-1, keepdim=True).abs(), min=1.0)
                 h = h_num / denom
 
                 outputs.append(h)
@@ -314,8 +316,9 @@ def build_minimal_mlstm(cfg):
         def __init__(self, d_model, vocab_size, n_layers):
             super().__init__()
             self.embed = nn.Embedding(vocab_size, d_model)
-            self.layers = nn.ModuleList([mLSTMCell(d_model) for _ in range(n_layers)])
-            self.norm   = nn.LayerNorm(d_model)
+            self.layers = nn.ModuleList(
+                [mLSTMCell(d_model) for _ in range(n_layers)])
+            self.norm = nn.LayerNorm(d_model)
 
         def forward(self, input_ids):
             x = self.embed(input_ids)
@@ -385,16 +388,17 @@ def build_minimal_mamba(cfg):
 
     class S6(nn.Module):
         """Minimal selective state space model."""
+
         def __init__(self, d_model, d_state=16, d_conv=4, expand=2):
             super().__init__()
             self.d_inner = d_model * expand
             self.d_state = d_state
 
             # These are the SoRA target modules
-            self.in_proj  = nn.Linear(d_model, self.d_inner * 2, bias=False)
+            self.in_proj = nn.Linear(d_model, self.d_inner * 2, bias=False)
             self.out_proj = nn.Linear(self.d_inner, d_model, bias=False)
-            self.x_proj   = nn.Linear(self.d_inner, 16 + 2 * d_state, bias=False)
-            self.dt_proj  = nn.Linear(16, self.d_inner)
+            self.x_proj = nn.Linear(self.d_inner, 16 + 2 * d_state, bias=False)
+            self.dt_proj = nn.Linear(16, self.d_inner)
 
             self.conv1d = nn.Conv1d(
                 self.d_inner, self.d_inner,
@@ -403,32 +407,39 @@ def build_minimal_mamba(cfg):
             )
 
             # SSM parameters A, D
-            A = torch.arange(1, d_state + 1, dtype=torch.float).unsqueeze(0).expand(self.d_inner, -1)
+            A = torch.arange(
+                1, d_state + 1, dtype=torch.float).unsqueeze(0).expand(self.d_inner, -1)
             self.A_log = nn.Parameter(torch.log(A))
-            self.D     = nn.Parameter(torch.ones(self.d_inner))
-            self.norm  = nn.LayerNorm(d_model)
+            self.D = nn.Parameter(torch.ones(self.d_inner))
+            self.norm = nn.LayerNorm(d_model)
 
         def forward(self, x):
             B, T, D = x.shape
             xz = self.in_proj(x)                          # (B, T, 2*d_inner)
-            u, z = xz.chunk(2, dim=-1)                    # each (B, T, d_inner)
+            # each (B, T, d_inner)
+            u, z = xz.chunk(2, dim=-1)
 
             # conv over sequence
             u_conv = self.conv1d(u.transpose(1, 2))[..., :T].transpose(1, 2)
-            u_act  = F.silu(u_conv)                       # (B, T, d_inner)
+            u_act = F.silu(u_conv)                       # (B, T, d_inner)
 
             # selective parameters
-            x_dbl = self.x_proj(u_act)                    # (B, T, dt_rank+2*d_state)
-            dt, B_ssm, C_ssm = x_dbl.split([16, self.d_state, self.d_state], dim=-1)
+            # (B, T, dt_rank+2*d_state)
+            x_dbl = self.x_proj(u_act)
+            dt, B_ssm, C_ssm = x_dbl.split(
+                [16, self.d_state, self.d_state], dim=-1)
             dt = F.softplus(self.dt_proj(dt))             # (B, T, d_inner)
 
             # discretize A
             A = -torch.exp(self.A_log)                    # (d_inner, d_state)
-            dA = torch.exp(dt.unsqueeze(-1) * A)          # (B, T, d_inner, d_state)
-            dB = dt.unsqueeze(-1) * B_ssm.unsqueeze(2)    # (B, T, d_inner, d_state)
+            # (B, T, d_inner, d_state)
+            dA = torch.exp(dt.unsqueeze(-1) * A)
+            # (B, T, d_inner, d_state)
+            dB = dt.unsqueeze(-1) * B_ssm.unsqueeze(2)
 
             # sequential scan
-            h = torch.zeros(B, self.d_inner, self.d_state, device=x.device, dtype=x.dtype)
+            h = torch.zeros(B, self.d_inner, self.d_state,
+                            device=x.device, dtype=x.dtype)
             ys = []
             for t in range(T):
                 h = dA[:, t] * h + dB[:, t] * u_act[:, t].unsqueeze(-1)
@@ -444,9 +455,9 @@ def build_minimal_mamba(cfg):
     class MinimalMambaBackbone(nn.Module):
         def __init__(self, d_model, vocab_size, n_layers):
             super().__init__()
-            self.embed  = nn.Embedding(vocab_size, d_model)
+            self.embed = nn.Embedding(vocab_size, d_model)
             self.layers = nn.ModuleList([S6(d_model) for _ in range(n_layers)])
-            self.norm   = nn.LayerNorm(d_model)
+            self.norm = nn.LayerNorm(d_model)
 
         def forward(self, input_ids):
             x = self.embed(input_ids)
@@ -473,10 +484,11 @@ def train_sora_recurrent(model, cfg, train_loader, val_loader,
         weight_decay=cfg.weight_decay,
     )
 
-    total_steps  = len(train_loader) * cfg.num_epochs
+    total_steps = len(train_loader) * cfg.num_epochs
     warmup_steps = int(total_steps * cfg.warmup_ratio)
-    scheduler    = get_linear_schedule_with_warmup(optimizer, warmup_steps, total_steps)
-    scaler       = torch.cuda.amp.GradScaler(enabled=(device == "cuda"))
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, warmup_steps, total_steps)
+    scaler = torch.cuda.amp.GradScaler(enabled=(device == "cuda"))
 
     best_mcc = -1.0
     avg_rank = 0.0
@@ -512,19 +524,21 @@ def train_sora_recurrent(model, cfg, train_loader, val_loader,
             for batch in val_loader:
                 batch = {k: v.to(device) for k, v in batch.items()}
                 outputs = model(**batch)
-                preds  = outputs.logits.argmax(-1).cpu().numpy()
+                preds = outputs.logits.argmax(-1).cpu().numpy()
                 labels = batch["labels"].cpu().numpy()
                 all_preds.extend(preds)
                 all_labels.extend(labels)
 
         mcc = compute_mcc(all_preds, all_labels)
 
-        eff_ranks_strict    = get_effective_ranks(model, eps=1e-6)
+        eff_ranks_strict = get_effective_ranks(model, eps=1e-6)
         eff_ranks_effective = get_effective_ranks(model, eps=1e-3)
-        avg_rank_strict     = float(np.mean(list(eff_ranks_strict.values()))) if eff_ranks_strict else 0.0
-        avg_rank_effective  = float(np.mean(list(eff_ranks_effective.values()))) if eff_ranks_effective else 0.0
+        avg_rank_strict = float(
+            np.mean(list(eff_ranks_strict.values()))) if eff_ranks_strict else 0.0
+        avg_rank_effective = float(
+            np.mean(list(eff_ranks_effective.values()))) if eff_ranks_effective else 0.0
         eff_ranks = eff_ranks_effective
-        avg_rank  = avg_rank_effective
+        avg_rank = avg_rank_effective
 
         print(f"  [{arch_name}] Epoch {epoch} | MCC={mcc:.4f} | "
               f"Exact rank(1e-6)={avg_rank_strict:.1f} | "
@@ -552,19 +566,24 @@ def train_sora_xlstm(cfg, save_dir):
     cfg.vocab_size = tokenizer.vocab_size
     train_ds, val_ds = load_cola(cfg, tokenizer)
 
-    collator    = DataCollatorWithPadding(tokenizer)
-    train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True,  collate_fn=collator)
-    val_loader   = DataLoader(val_ds,   batch_size=cfg.batch_size, shuffle=False, collate_fn=collator)
+    collator = DataCollatorWithPadding(tokenizer)
+    train_loader = DataLoader(
+        train_ds, batch_size=cfg.batch_size, shuffle=True,  collate_fn=collator)
+    val_loader = DataLoader(
+        val_ds,   batch_size=cfg.batch_size, shuffle=False, collate_fn=collator)
 
     backbone, d_model, target_modules = build_xlstm_backbone(cfg)
-    model = SequenceClassifier(backbone, d_model, num_labels=cfg.num_labels).to(device)
+    model = SequenceClassifier(
+        backbone, d_model, num_labels=cfg.num_labels).to(device)
 
     replaced = inject_sora(
         model, target_modules,
         r=cfg.sora_r, alpha=cfg.lora_alpha,
         dropout=cfg.lora_dropout, lora_lambda=cfg.sora_lambda,
     )
-    print(f"  SoRA: replaced {replaced} linear layers (targets: {target_modules})")
+    model = model.to(device)
+    print(
+        f"  SoRA: replaced {replaced} linear layers (targets: {target_modules})")
     freeze_base(model)
 
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -605,19 +624,23 @@ def train_sora_mamba(cfg, save_dir):
     cfg.vocab_size = tokenizer.vocab_size
     train_ds, val_ds = load_cola(cfg, tokenizer)
 
-    collator     = DataCollatorWithPadding(tokenizer)
-    train_loader = DataLoader(train_ds, batch_size=cfg.batch_size, shuffle=True,  collate_fn=collator)
-    val_loader   = DataLoader(val_ds,   batch_size=cfg.batch_size, shuffle=False, collate_fn=collator)
+    collator = DataCollatorWithPadding(tokenizer)
+    train_loader = DataLoader(
+        train_ds, batch_size=cfg.batch_size, shuffle=True,  collate_fn=collator)
+    val_loader = DataLoader(
+        val_ds,   batch_size=cfg.batch_size, shuffle=False, collate_fn=collator)
 
     backbone, d_model, target_modules = build_mamba_backbone(cfg)
-    model = SequenceClassifier(backbone, d_model, num_labels=cfg.num_labels).to(device)
+    model = SequenceClassifier(
+        backbone, d_model, num_labels=cfg.num_labels).to(device)
 
     replaced = inject_sora(
         model, target_modules,
         r=cfg.sora_r, alpha=cfg.lora_alpha,
         dropout=cfg.lora_dropout, lora_lambda=cfg.sora_lambda,
     )
-    print(f"  SoRA: replaced {replaced} linear layers (targets: {target_modules})")
+    print(
+        f"  SoRA: replaced {replaced} linear layers (targets: {target_modules})")
     freeze_base(model)
 
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -671,11 +694,11 @@ def plot_part3(metrics_list, save_dir):
     os.makedirs(save_dir, exist_ok=True)
 
     methods = [m["method"] for m in metrics_list]
-    mccs    = [m["mcc"] for m in metrics_list]
-    params  = [m["trainable_params"] for m in metrics_list]
-    ranks   = [m["effective_rank"] for m in metrics_list]
-    times   = [m["train_time_sec"] for m in metrics_list]
-    colors  = ["#4C72B0", "#DD8452", "#55A868", "#C44E52"][:len(methods)]
+    mccs = [m["mcc"] for m in metrics_list]
+    params = [m["trainable_params"] for m in metrics_list]
+    ranks = [m["effective_rank"] for m in metrics_list]
+    times = [m["train_time_sec"] for m in metrics_list]
+    colors = ["#4C72B0", "#DD8452", "#55A868", "#C44E52"][:len(methods)]
 
     fig, axes = plt.subplots(1, 4, figsize=(18, 5))
     fig.suptitle("SoRA on Transformer vs xLSTM vs Mamba — CoLA", fontsize=12)
