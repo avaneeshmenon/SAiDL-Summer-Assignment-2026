@@ -1,0 +1,8 @@
+{
+    "method": "lora",
+    "mcc": 0.6777292650485364,
+    "trainable_params": 443906,
+    "train_time_sec": 629.1250097751617,
+    "lora_r": 8,
+    "effective_rank": 8
+}

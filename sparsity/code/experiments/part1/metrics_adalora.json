@@ -1,0 +1,9 @@
+{
+    "method": "adalora",
+    "mcc": 0.6306906620617413,
+    "trainable_params": 665522,
+    "train_time_sec": 932.3733108043671,
+    "init_r": 12,
+    "target_r": 8,
+    "effective_rank": 8.0
+}

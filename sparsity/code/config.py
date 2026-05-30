@@ -34,6 +34,15 @@ class SparsityConfig:
     sora_lambda:    float = 0.2
     sora_lr_gate:   float = 1e-4
 
+    # ── xLSTM (Part 3) ───────────────────────────────────────────────────
+    xlstm_d_model:  int = 256   # hidden dim (small — trained from scratch)
+    xlstm_n_layers: int = 4
+    vocab_size:     int = 50265  # set dynamically from tokenizer in part3.py
+ 
+    # ── Mamba (Part 3) ───────────────────────────────────────────────────
+    mamba_d_model:  int = 256   # hidden dim
+    mamba_n_layers: int = 4
+
     # ── Paths ─────────────────────────────────────────────────────────────
     data_dir:    str = "glue_data"
     output_dir:  str = "experiments"

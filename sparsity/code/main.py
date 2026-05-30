@@ -148,14 +148,17 @@ def run_part1():
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-
-    RUN_PART1 = True
+ 
+    RUN_PART1 = False
     RUN_PART2 = False
-    RUN_PART3 = False
-
+    RUN_PART3 = True          # ← toggle this
+ 
     if RUN_PART1:
         run_part1()
     elif RUN_PART2:
         run_part2()
     elif RUN_PART3:
-        pass
+        from config import SparsityConfig
+        from part3 import run_part3
+        cfg = SparsityConfig()
+        run_part3(cfg)
