@@ -1,0 +1,13 @@
+{
+    "val_loss": 5.397791315297612,
+    "perplexity": 220.9179388844758,
+    "throughput": 16487.637253506626,
+    "peak_mem_mb": 3291.318784,
+    "model": "gated_conv_ff",
+    "conv_type": "gated_conv_ff",
+    "attention_type": "gqa",
+    "pos_type": "relative",
+    "context_length": 512,
+    "params": 75290112,
+    "epoch_time_avg": 255.1700473785997
+}

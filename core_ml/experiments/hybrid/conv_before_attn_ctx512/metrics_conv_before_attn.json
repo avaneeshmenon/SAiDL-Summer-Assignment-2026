@@ -1,0 +1,13 @@
+{
+    "val_loss": 5.138032983561031,
+    "perplexity": 170.38029764497676,
+    "throughput": 23557.090611801614,
+    "peak_mem_mb": 2813.7088,
+    "model": "conv_before_attn",
+    "conv_type": "conv_before_attn",
+    "attention_type": "gqa",
+    "pos_type": "relative",
+    "context_length": 512,
+    "params": 45436416,
+    "epoch_time_avg": 187.8854526763
+}
