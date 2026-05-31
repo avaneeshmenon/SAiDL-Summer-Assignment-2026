@@ -793,7 +793,7 @@ def run_part3(cfg):
 
     RUN_XLSTM_BASELINE = False
 
-    RUN_XLSTM = False
+    RUN_XLSTM = True
 
     RUN_MAMBA = True
 
