@@ -245,7 +245,6 @@ def build_mamba_backbone(cfg):
     Falls back to a minimal SSM if package unavailable.
     """
     try:
-        from mamba_ssm import Mamba
         from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
         from mamba_ssm.models.config_mamba import MambaConfig
 
@@ -264,11 +263,12 @@ def build_mamba_backbone(cfg):
                 self.model = MambaLMHeadModel(mamba_cfg)
 
             def forward(self, input_ids):
-                # returns CausalLMOutput; we want hidden states
-                out = self.model(input_ids, return_dict=True,
-                                 output_hidden_states=True)
-                # last hidden state before LM head
-                return out.hidden_states[-1]
+                # call the mixer backbone directly — mamba-ssm's LMHeadModel
+                # does not accept HuggingFace-style kwargs
+                out = self.model.backbone(input_ids)
+                if isinstance(out, tuple):
+                    out = out[0]
+                return out  # (B, T, d_model)
 
         print("  Using mamba-ssm package")
         return MambaBackbone(), cfg.mamba_d_model, MAMBA_TARGET_MODULES
@@ -793,9 +793,9 @@ def run_part3(cfg):
 
     RUN_XLSTM_BASELINE = False
 
-    RUN_XLSTM = True
+    RUN_XLSTM = False
 
-    RUN_MAMBA = False
+    RUN_MAMBA = True
 
     if RUN_XLSTM_BASELINE:
         m_xlstm_base = train_xlstm_baseline(cfg, save_dir)
