@@ -213,7 +213,7 @@ def build_xlstm_backbone(cfg):
                 num_heads=4,
             )
         ),
-        num_blocks=4,
+        num_blocks=2,
         embedding_dim=cfg.xlstm_d_model,
         add_post_blocks_norm=True,
         context_length=cfg.max_length,
