@@ -53,12 +53,7 @@ from methods.sora import SoRALinear
 # Target modules per architecture
 # ─────────────────────────────────────────────────────────────────────────────
 
-XLSTM_TARGET_MODULES = [
-    # mLSTM cell projections (matrix memory)
-    "q_proj", "k_proj", "v_proj",
-    # input/output projections in the block
-    "proj_up", "proj_down",
-]
+XLSTM_TARGET_MODULES = ["proj_up", "proj_down", "igate", "fgate"]
 
 MAMBA_TARGET_MODULES = [
     "in_proj",   # expands hidden → 2*d_inner
@@ -208,136 +203,32 @@ class SequenceClassifier(nn.Module):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_xlstm_backbone(cfg):
-    """
-    Build a small xLSTM model using the `xlstm` package.
-    Falls back to a minimal pure-PyTorch mLSTM if package unavailable.
-    """
-    try:
-        from xlstm import xLSTMLMModel, xLSTMBlockStackConfig, mLSTMBlockConfig, mLSTMLayerConfig
+    from xlstm import xLSTMBlockStack, xLSTMBlockStackConfig, mLSTMBlockConfig, mLSTMLayerConfig
 
-        xlstm_cfg = xLSTMBlockStackConfig(
-            mlstm_block=mLSTMBlockConfig(
-                mlstm=mLSTMLayerConfig(
-                    conv1d_kernel_size=4,
-                    qkv_proj_blocksize=4,
-                    num_heads=4,
-                )
-            ),
-            num_blocks=4,
-            embedding_dim=cfg.xlstm_d_model,
-            add_post_blocks_norm=True,
-        )
+    xlstm_cfg = xLSTMBlockStackConfig(
+        mlstm_block=mLSTMBlockConfig(
+            mlstm=mLSTMLayerConfig(
+                conv1d_kernel_size=4,
+                qkv_proj_blocksize=4,
+                num_heads=4,
+            )
+        ),
+        num_blocks=4,
+        embedding_dim=cfg.xlstm_d_model,
+        add_post_blocks_norm=True,
+    )
 
-        class xLSTMBackbone(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.embed = nn.Embedding(cfg.vocab_size, cfg.xlstm_d_model)
-                self.xlstm = xLSTMLMModel(xlstm_cfg)
-
-            def forward(self, input_ids):
-                x = self.embed(input_ids)
-                return self.xlstm(x)
-
-        print("  Using xlstm package")
-        return xLSTMBackbone(), cfg.xlstm_d_model, XLSTM_TARGET_MODULES
-
-    except ImportError:
-        print("  xlstm package not found — using minimal mLSTM implementation")
-        return build_minimal_mlstm(cfg), cfg.xlstm_d_model, [
-            "Wq",
-            "Wk",
-            "Wv",
-            "Wi",
-            "Wf",
-            "proj_out"
-        ]
-
-
-def build_minimal_mlstm(cfg):
-    """
-    Minimal mLSTM (matrix memory LSTM from xLSTM paper) in pure PyTorch.
-
-    State: C ∈ R^{d x d} (matrix memory), n ∈ R^d (normalizer), m (scalar max)
-    Update:
-        q = Wq * x,  k = Wk * x,  v = Wv * x
-        i = exp(Wi*x + bi),  f = exp(Wf*x + bf)   (input/forget gates, log-space)
-        m_new = max(log_f + m_old, log_i)
-        i' = exp(log_i - m_new),  f' = exp(log_f + m_old - m_new)
-        C = f'*C + i' * (v ⊗ k)
-        n = f'*n + i'*k
-        h = (C*q) / max(|n^T q|, 1)
-    """
-
-    class mLSTMCell(nn.Module):
-        def __init__(self, d_model):
+    class xLSTMBackbone(nn.Module):
+        def __init__(self):
             super().__init__()
-            self.d = d_model
-            # These are the target modules for SoRA injection
-            self.Wq = nn.Linear(d_model, d_model, bias=False)
-            self.Wk = nn.Linear(d_model, d_model, bias=False)
-            self.Wv = nn.Linear(d_model, d_model, bias=False)
-            self.Wi = nn.Linear(d_model, 1)
-            self.Wf = nn.Linear(d_model, 1)
-            self.proj_out = nn.Linear(d_model, d_model)
-            self.norm = nn.LayerNorm(d_model)
-
-        def forward_sequence(self, x):
-            # x: (B, T, D)
-            B, T, D = x.shape
-            C = torch.zeros(B, D, D, device=x.device, dtype=x.dtype)
-            n = torch.zeros(B, D, device=x.device, dtype=x.dtype)
-            m = torch.full((B, 1), -1e9, device=x.device, dtype=x.dtype)
-            outputs = []
-
-            for t in range(T):
-                xt = x[:, t, :]
-                q = self.Wq(xt)
-                k = self.Wk(xt) / (D ** 0.5)
-                v = self.Wv(xt)
-
-                log_i = self.Wi(xt)           # (B, 1)
-                log_f = F.logsigmoid(self.Wf(xt))  # (B, 1)  — stabilized
-
-                m_new = torch.maximum(log_f + m, log_i)
-                i_prime = torch.exp(log_i - m_new)
-                f_prime = torch.exp(log_f + m - m_new)
-
-                # C: (B, D, D), outer product v⊗k: (B, D, D)
-                C = f_prime.unsqueeze(-1) * C + i_prime.unsqueeze(-1) * torch.bmm(
-                    v.unsqueeze(2), k.unsqueeze(1)
-                )
-                n = f_prime * n + i_prime * k
-                m = m_new
-
-                # retrieve
-                h_num = torch.bmm(C, q.unsqueeze(2)).squeeze(2)   # (B, D)
-                denom = torch.clamp(
-                    (n * q).sum(-1, keepdim=True).abs(), min=1.0)
-                h = h_num / denom
-
-                outputs.append(h)
-
-            return torch.stack(outputs, dim=1)   # (B, T, D)
-
-    class MinimalMLSTMBackbone(nn.Module):
-        def __init__(self, d_model, vocab_size, n_layers):
-            super().__init__()
-            self.embed = nn.Embedding(vocab_size, d_model)
-            self.layers = nn.ModuleList(
-                [mLSTMCell(d_model) for _ in range(n_layers)])
-            self.norm = nn.LayerNorm(d_model)
+            self.embed = nn.Embedding(cfg.vocab_size, cfg.xlstm_d_model)
+            self.xlstm = xLSTMBlockStack(xlstm_cfg)
 
         def forward(self, input_ids):
             x = self.embed(input_ids)
-            for layer in self.layers:
-                x = x + layer.forward_sequence(self.norm(x))
-            return x
+            return self.xlstm(x)
 
-    return MinimalMLSTMBackbone(
-        d_model=cfg.xlstm_d_model,
-        vocab_size=cfg.vocab_size,
-        n_layers=cfg.xlstm_n_layers,
-    )
+    return xLSTMBackbone(), cfg.xlstm_d_model, XLSTM_TARGET_MODULES
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -892,8 +783,6 @@ def run_part3(cfg):
         print("  Loaded Part 1 SoRA metrics for comparison")
     except FileNotFoundError:
         print("  Part 1 SoRA metrics not found — skipping baseline comparison")
-
-    RUN_XLSTM_BASELINE = False
 
     RUN_XLSTM = True
 

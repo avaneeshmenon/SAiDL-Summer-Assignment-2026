@@ -67,6 +67,8 @@ class SoRALinear(nn.Module):
     ):
         super().__init__()
 
+        r = min(r, in_features, out_features)
+
         self.r = r
         self.lora_alpha = lora_alpha
         self.scaling = lora_alpha / r
