@@ -110,7 +110,7 @@ def inject_sora(model: nn.Module, target_modules: list[str],
 def freeze_base(model: nn.Module):
     """Freeze all params except SoRA trainable ones and classifier head."""
     for name, param in model.named_parameters():
-        if any(k in name for k in ["lora_A", "lora_B", "gate", "classifier", "head", "embed", "norm"]):
+        if any(k in name for k in ["lora_A", "lora_B", "gate", "classifier", "head"]):
             param.requires_grad = True
         else:
             param.requires_grad = False
