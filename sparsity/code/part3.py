@@ -107,10 +107,13 @@ def inject_sora(model: nn.Module, target_modules: list[str],
     return replaced
 
 
-def freeze_base(model: nn.Module):
+def freeze_base(model: nn.Module, unfreeze_embed: bool = False):
     """Freeze all params except SoRA trainable ones and classifier head."""
+    keywords = ["lora_A", "lora_B", "gate", "classifier", "head"]
+    if unfreeze_embed:
+        keywords.append("embed")
     for name, param in model.named_parameters():
-        if any(k in name for k in ["lora_A", "lora_B", "gate", "classifier", "head"]):
+        if any(k in name for k in keywords):
             param.requires_grad = True
         else:
             param.requires_grad = False
@@ -485,7 +488,7 @@ def train_sora_xlstm(cfg, save_dir):
     model = model.to(device)
     print(
         f"  SoRA: replaced {replaced} linear layers (targets: {target_modules})")
-    freeze_base(model)
+    freeze_base(model, unfreeze_embed=True)
 
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"  Trainable parameters: {n_trainable:,}")
@@ -788,9 +791,9 @@ def run_part3(cfg):
     except FileNotFoundError:
         print("  Part 1 SoRA metrics not found — skipping baseline comparison")
 
-    RUN_XLSTM_BASELINE = True
+    RUN_XLSTM_BASELINE = False
 
-    RUN_XLSTM = False
+    RUN_XLSTM = True
 
     RUN_MAMBA = False
 
