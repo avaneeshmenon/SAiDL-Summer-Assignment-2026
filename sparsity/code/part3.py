@@ -376,10 +376,11 @@ def build_minimal_mamba(cfg):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def train_sora_recurrent(model, cfg, train_loader, val_loader,
-                         device, arch_name, save_dir):
+                         device, arch_name, save_dir, lr=None, use_amp=True):
+    lr = lr or cfg.learning_rate
     optimizer = torch.optim.AdamW(
         [p for p in model.parameters() if p.requires_grad],
-        lr=cfg.learning_rate,
+        lr=lr,
         weight_decay=cfg.weight_decay,
     )
 
@@ -387,7 +388,8 @@ def train_sora_recurrent(model, cfg, train_loader, val_loader,
     warmup_steps = int(total_steps * cfg.warmup_ratio)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, warmup_steps, total_steps)
-    scaler = torch.cuda.amp.GradScaler(enabled=(device == "cuda"))
+    amp_enabled = (device == "cuda") and use_amp
+    scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
 
     best_mcc = -1.0
     avg_rank = 0.0
@@ -400,7 +402,7 @@ def train_sora_recurrent(model, cfg, train_loader, val_loader,
             batch = {k: v.to(device) for k, v in batch.items()}
             optimizer.zero_grad()
 
-            with torch.cuda.amp.autocast(enabled=(device == "cuda")):
+            with torch.cuda.amp.autocast(enabled=amp_enabled):
                 outputs = model(**batch)
                 loss = outputs.loss
 
@@ -414,7 +416,7 @@ def train_sora_recurrent(model, cfg, train_loader, val_loader,
             scaler.update()
             scheduler.step()
 
-            apply_proximal_updates(model, cfg.learning_rate)
+            apply_proximal_updates(model, lr)
 
         # ── evaluate ─────────────────────────────────────────────────────
         model.eval()
@@ -485,11 +487,17 @@ def train_sora_xlstm(cfg, save_dir):
         f"  SoRA: replaced {replaced} linear layers (targets: {target_modules})")
     freeze_base(model)
 
+    print("  Replaced layers:")
+    for name, module in model.named_modules():
+        if isinstance(module, SoRALinear):
+            print(f"    - {name}")
+
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"  Trainable parameters: {n_trainable:,}")
 
     best_mcc, avg_rank, eff_ranks, elapsed = train_sora_recurrent(
-        model, cfg, train_loader, val_loader, device, "xLSTM", save_dir
+        model, cfg, train_loader, val_loader, device, "xLSTM", save_dir,
+        lr=1e-4, use_amp=False,
     )
 
     metrics = {
