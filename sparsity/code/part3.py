@@ -488,7 +488,7 @@ def train_sora_xlstm(cfg, save_dir):
     model = model.to(device)
     print(
         f"  SoRA: replaced {replaced} linear layers (targets: {target_modules})")
-    freeze_base(model, unfreeze_embed=True)
+    freeze_base(model, unfreeze_embed=False)
 
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"  Trainable parameters: {n_trainable:,}")
