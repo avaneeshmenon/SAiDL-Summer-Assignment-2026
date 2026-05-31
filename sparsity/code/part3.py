@@ -216,6 +216,7 @@ def build_xlstm_backbone(cfg):
         num_blocks=4,
         embedding_dim=cfg.xlstm_d_model,
         add_post_blocks_norm=True,
+        context_length=cfg.max_length,
     )
 
     class xLSTMBackbone(nn.Module):
