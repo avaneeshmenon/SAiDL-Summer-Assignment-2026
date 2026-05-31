@@ -487,17 +487,11 @@ def train_sora_xlstm(cfg, save_dir):
         f"  SoRA: replaced {replaced} linear layers (targets: {target_modules})")
     freeze_base(model)
 
-    print("  Replaced layers:")
-    for name, module in model.named_modules():
-        if isinstance(module, SoRALinear):
-            print(f"    - {name}")
-
     n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"  Trainable parameters: {n_trainable:,}")
 
     best_mcc, avg_rank, eff_ranks, elapsed = train_sora_recurrent(
         model, cfg, train_loader, val_loader, device, "xLSTM", save_dir,
-        lr=1e-4, use_amp=False,
     )
 
     metrics = {
@@ -645,6 +639,7 @@ def train_xlstm_baseline(cfg, save_dir):
         "mcc": best_mcc,
         "trainable_params": n_trainable,
         "train_time_sec": elapsed,
+        "effective_rank": 0.0,
     }
 
     os.makedirs(save_dir, exist_ok=True)
@@ -793,16 +788,18 @@ def run_part3(cfg):
     except FileNotFoundError:
         print("  Part 1 SoRA metrics not found — skipping baseline comparison")
 
-    RUN_XLSTM = True
+    RUN_XLSTM_BASELINE = True
+
+    RUN_XLSTM = False
 
     RUN_MAMBA = False
 
-    # if RUN_XLSTM_BASELINE:
-    #     m_xlstm_base = train_xlstm_baseline(cfg, save_dir)
-    # else:
-    #     with open(f"{save_dir}/metrics_xlstm_baseline.json") as f:
-    #         m_xlstm_base = json.load(f)
-    # all_metrics.append(m_xlstm_base)
+    if RUN_XLSTM_BASELINE:
+        m_xlstm_base = train_xlstm_baseline(cfg, save_dir)
+    else:
+        with open(f"{save_dir}/metrics_xlstm_baseline.json") as f:
+            m_xlstm_base = json.load(f)
+    all_metrics.append(m_xlstm_base)
 
     if RUN_XLSTM:
         m_xlstm = train_sora_xlstm(cfg, save_dir)
