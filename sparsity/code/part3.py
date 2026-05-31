@@ -805,10 +805,14 @@ def run_part3(cfg):
 
     if RUN_MAMBA:
         m_mamba = train_sora_mamba(cfg, save_dir)
+        all_metrics.append(m_mamba)
     else:
-        with open(f"{save_dir}/metrics_sora_mamba.json") as f:
-            m_mamba = json.load(f)
-    all_metrics.append(m_mamba)
+        try:
+            with open(f"{save_dir}/metrics_sora_mamba.json") as f:
+                m_mamba = json.load(f)
+            all_metrics.append(m_mamba)
+        except FileNotFoundError:
+            print("  Mamba metrics not found — skipping (set RUN_MAMBA=True to train)")
 
     print_part3_table(all_metrics)
     plot_part3(all_metrics, save_dir)

@@ -36,7 +36,7 @@ class SparsityConfig:
 
     # ── xLSTM (Part 3) ───────────────────────────────────────────────────
     xlstm_d_model:  int = 256   # hidden dim (small — trained from scratch)
-    xlstm_n_layers: int = 2
+    xlstm_n_layers: int = 4
     vocab_size:     int = 50265  # set dynamically from tokenizer in part3.py
 
     # ── Mamba (Part 3) ───────────────────────────────────────────────────
