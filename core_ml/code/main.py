@@ -388,6 +388,7 @@ AFT_GROUPS = {
     1: ["aft_full",  "aft_simple"],
     2: ["aft_local", "aft_conv"],
     3: ["aft_rope_simple"],
+    4: ["aft_decay"],
 }
 
 
@@ -410,10 +411,13 @@ def _train_variant(variant, save_dir, enc, train_tokens, val_tokens, device):
     cfg.pos_encoding_type = "learned"
     cfg.context_length    = CONTEXT_LENGTH
 
-    # AFT-Full and AFT-Local need smaller batch (O(T²·d) tensor)
-    if variant in ("aft_full", "aft_local"):
+    # AFT-Full, AFT-Local, AFT-Conv all materialise (B,T,T,d) in forward
+    if variant in ("aft_full", "aft_local", "aft_conv"):
         cfg.batch_size = 2
         cfg.max_epochs = 3
+
+    # clear any leftover GPU memory from previous variant
+    torch.cuda.empty_cache()
 
     train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
     model     = TransformerLM(cfg).to(device)
@@ -432,6 +436,9 @@ def _train_variant(variant, save_dir, enc, train_tokens, val_tokens, device):
         json.dump(metrics, f, indent=4)
 
     torch.save(model.state_dict(), f"{save_dir}/model_{variant}.pt")
+
+    del model, optimizer, train_loader, val_loader
+    torch.cuda.empty_cache()
 
     steps = history["step"]
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
@@ -452,7 +459,7 @@ def _combine_and_plot(save_dir):
     import json
     import matplotlib.pyplot as plt
 
-    all_variants = ["gqa", "aft_full", "aft_local", "aft_simple", "aft_conv", "aft_rope_simple"]
+    all_variants = ["gqa", "aft_full", "aft_local", "aft_simple", "aft_conv", "aft_rope_simple", "aft_decay"]
     all_metrics = []
 
     for variant in all_variants:

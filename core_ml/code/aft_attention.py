@@ -155,7 +155,7 @@ class AFTLocal(nn.Module):
         # Build locality + causality mask
         # True = this (t, s) pair should be masked to -inf
         idx = torch.arange(T)
-        dist = idx.unsqueeze(0) - idx.unsqueeze(1)          # (T, T): dist[t,s] = t - s
+        dist = idx.unsqueeze(1) - idx.unsqueeze(0)          # (T, T): dist[t,s] = t - s
         # Mask: future positions OR positions too far in the past
         locality_mask = (dist < 0) | (dist > self.window)   # causal + local
         self.register_buffer("locality_mask", locality_mask)
@@ -383,6 +383,82 @@ class AFTRoPESimple(nn.Module):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 6. AFT-Decay  (our improved variant)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class AFTDecay(nn.Module):
+    """
+    AFT-Decay: AFT-Simple + data-dependent exponential decay gate.
+
+    ── The genuine gap in AFT-Simple ───────────────────────────────────────
+    AFT-Simple's cumulative sum weights every past token equally (up to key
+    magnitude). Language has strong locality bias: nearby tokens are far more
+    relevant than tokens from 500 positions ago. AFT-Simple cannot learn this.
+
+    RoPE on keys (AFT-RoPE-Simple) was our first attempt, but it failed
+    because RoPE works through the Q·K dot-product interaction in standard
+    attention. In AFT, Q is only a sigmoid gate — there is no Q·K inner
+    product for RoPE to encode relative distance through. The rotation just
+    adds noise to exp(K) without creating the expected position structure.
+
+    ── Fix: content-dependent decay gate ───────────────────────────────────
+    Replace the cumulative sum with a recurrent update that has a learned,
+    input-dependent decay gate — like an RNN forget gate applied to AFT's
+    key-value aggregation:
+
+        gate[t] = σ(W_g · x[t])  ∈ (0,1)^d     ← how much to retain history
+        h[t]    = gate[t] ⊙ h[t-1] + exp(K[t]) ⊙ V[t]
+        z[t]    = gate[t] ⊙ z[t-1] + exp(K[t])
+        Y[t]    = σ(Q[t]) ⊙ h[t] / (z[t] + ε)
+
+    When gate ≈ 1: full history retained (long-range dependencies).
+    When gate ≈ 0: history forgotten (focus on current token).
+
+    The gate is content-dependent — the model learns WHEN to forget and
+    when to remember based on what it's currently reading. This gives:
+      1. Implicit recency bias (decayed history → recent tokens weighted more)
+      2. Selective memory (some positions trigger forgetting, others don't)
+      3. Implicit positional awareness through the recurrent state
+
+    ── Complexity ──────────────────────────────────────────────────────────
+    O(T · d) — no T×T matrix anywhere. Sequential scan (parallelisable
+    with associative scan, but sequential here for simplicity).
+
+    ── Parameters ──────────────────────────────────────────────────────────
+    One extra linear layer W_g: d×d + d parameters.
+    """
+
+    def __init__(self, cfg):
+        super().__init__()
+        d = cfg.d_model
+        self.q    = nn.Linear(d, d, bias=False)
+        self.k    = nn.Linear(d, d, bias=False)
+        self.v    = nn.Linear(d, d, bias=False)
+        self.gate = nn.Linear(d, d, bias=True)
+        self.out  = nn.Linear(d, d, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, T, d = x.shape
+
+        q    = self.q(x)                      # (B, T, d)
+        k    = self.k(x)                      # (B, T, d)
+        v    = self.v(x)                      # (B, T, d)
+        gate = torch.sigmoid(self.gate(x))    # (B, T, d) ∈ (0, 1)
+        exp_k = torch.exp(k)                  # (B, T, d)
+
+        h = torch.zeros(B, d, device=x.device, dtype=x.dtype)
+        z = torch.zeros(B, d, device=x.device, dtype=x.dtype)
+        outs = []
+
+        for t in range(T):
+            h = gate[:, t] * h + exp_k[:, t] * v[:, t]
+            z = gate[:, t] * z + exp_k[:, t]
+            outs.append(torch.sigmoid(q[:, t]) * (h / (z + 1e-9)))
+
+        return self.out(torch.stack(outs, dim=1))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Registry — plug into your existing build_attention() system
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -392,6 +468,7 @@ AFT_REGISTRY = {
     "aft_simple":      AFTSimple,
     "aft_conv":        AFTConv,
     "aft_rope_simple": AFTRoPESimple,
+    "aft_decay":       AFTDecay,
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
