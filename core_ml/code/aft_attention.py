@@ -450,15 +450,23 @@ class AFTDecay(nn.Module):
         # Recurrence h[t] = gate[t]*h[t-1] + u[t] has closed form:
         #   h[t] = cp[t] * cumsum(u / cp)[t]
         # where cp[t] = gate[0]*...*gate[t] (cumulative product).
-        # Computed in log-space for numerical stability.
-        log_cp  = torch.cumsum(torch.log(gate.clamp(min=1e-8)), dim=1)
-        cp      = torch.exp(log_cp.clamp(-30, 30))      # (B, T, d)
-        inv_cp  = torch.exp(-log_cp.clamp(-30, 30))     # (B, T, d)
+        #
+        # Cast to float32: gate ∈ (0,1) so log_cp ≤ 0, but inv_cp = exp(-log_cp)
+        # can still be large enough to overflow float16 under AMP.
+        q, k, v, gate, exp_k = (t.float() for t in (q, k, v, gate, exp_k))
+
+        # log_cp is always ≤ 0 (gates ≤ 1); clamp from below to prevent underflow
+        log_cp  = torch.cumsum(torch.log(gate.clamp(min=1e-8)), dim=1).clamp(min=-10)
+        cp      = torch.exp(log_cp)          # (B, T, d) ∈ (0, 1]
+        inv_cp  = torch.exp(-log_cp)         # (B, T, d) ≥ 1, max exp(10) ≈ 22k
+
+        exp_k = exp_k.clamp(max=10)          # prevent exp_k * inv_cp overflow
 
         h = cp * torch.cumsum(exp_k * v * inv_cp, dim=1)   # (B, T, d)
         z = cp * torch.cumsum(exp_k     * inv_cp, dim=1)   # (B, T, d)
 
-        return self.out(torch.sigmoid(q) * (h / (z + 1e-9)))
+        out = torch.sigmoid(q) * (h / (z + 1e-9))
+        return self.out(out.to(x.dtype))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
