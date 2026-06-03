@@ -1,0 +1,24 @@
+{
+    "method": "sora_xlstm",
+    "mcc": 0.08294222652033967,
+    "trainable_params": 82562,
+    "train_time_sec": 121.90969038009644,
+    "sora_r": 8,
+    "effective_rank": 5.75,
+    "effective_ranks_per_layer": {
+        "backbone.xlstm.blocks.0.xlstm.proj_up": 8,
+        "backbone.xlstm.blocks.0.xlstm.mlstm_cell.igate": 4,
+        "backbone.xlstm.blocks.0.xlstm.mlstm_cell.fgate": 4,
+        "backbone.xlstm.blocks.0.xlstm.proj_down": 8,
+        "backbone.xlstm.blocks.1.xlstm.proj_up": 8,
+        "backbone.xlstm.blocks.1.xlstm.mlstm_cell.igate": 4,
+        "backbone.xlstm.blocks.1.xlstm.mlstm_cell.fgate": 2,
+        "backbone.xlstm.blocks.1.xlstm.proj_down": 8
+    },
+    "target_modules": [
+        "proj_up",
+        "proj_down",
+        "igate",
+        "fgate"
+    ]
+}
