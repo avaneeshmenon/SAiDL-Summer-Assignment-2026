@@ -367,7 +367,7 @@ def _plot_ppl_vs_compute(metrics_list, attn, pos, ctx):
     print(f"\n  Saved PPL vs Compute scatter → {out}")
 
 
-#for bonus
+# for bonus
 GQA_BASELINE_METRICS = {
     "val_loss": 5.004411822459737,
     "perplexity": 149.06937810770194,
@@ -388,7 +388,7 @@ AFT_GROUPS = {
     1: ["aft_full",  "aft_simple"],
     2: ["aft_local", "aft_conv"],
     3: ["aft_rope_simple"],
-    4: ["aft_decay"],
+    4: ["aft_conv"],
 }
 
 
@@ -407,9 +407,9 @@ def _train_variant(variant, save_dir, enc, train_tokens, val_tokens, device):
         pass
 
     cfg = TransformerConfig()
-    cfg.attention_type    = variant
+    cfg.attention_type = variant
     cfg.pos_encoding_type = "learned"
-    cfg.context_length    = CONTEXT_LENGTH
+    cfg.context_length = CONTEXT_LENGTH
 
     # AFT-Full, AFT-Local, AFT-Conv all materialise (B,T,T,d) in forward
     if variant in ("aft_full", "aft_local", "aft_conv"):
@@ -420,7 +420,7 @@ def _train_variant(variant, save_dir, enc, train_tokens, val_tokens, device):
     torch.cuda.empty_cache()
 
     train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
-    model     = TransformerLM(cfg).to(device)
+    model = TransformerLM(cfg).to(device)
     optimizer = build_optimizer(model, cfg)
 
     history = train(model, cfg, train_loader, val_loader, optimizer, device)
@@ -428,9 +428,11 @@ def _train_variant(variant, save_dir, enc, train_tokens, val_tokens, device):
     metrics = evaluate(model, val_loader, device, max_iters=len(val_loader))
     metrics["attention_type"] = variant
     metrics["context_length"] = CONTEXT_LENGTH
-    metrics["params"]         = model.count_parameters()
-    metrics["epoch_time_avg"] = sum(history["epoch_time"]) / len(history["epoch_time"])
-    metrics["peak_mem_mb"]    = max(history["peak_mem_mb"]) if history["peak_mem_mb"] else 0.0
+    metrics["params"] = model.count_parameters()
+    metrics["epoch_time_avg"] = sum(
+        history["epoch_time"]) / len(history["epoch_time"])
+    metrics["peak_mem_mb"] = max(
+        history["peak_mem_mb"]) if history["peak_mem_mb"] else 0.0
 
     with open(json_path, "w") as f:
         json.dump(metrics, f, indent=4)
@@ -444,14 +446,18 @@ def _train_variant(variant, save_dir, enc, train_tokens, val_tokens, device):
     fig, axes = plt.subplots(1, 3, figsize=(15, 4))
     axes[0].plot(steps, history["train_loss"], label="Train")
     axes[0].plot(steps, history["val_loss"],   label="Val")
-    axes[0].legend(); axes[0].set_title(f"Loss — {variant}")
-    axes[1].plot(steps, history["perplexity"]); axes[1].set_title("PPL")
-    axes[2].plot(steps, history["lr"]);          axes[2].set_title("LR")
+    axes[0].legend()
+    axes[0].set_title(f"Loss — {variant}")
+    axes[1].plot(steps, history["perplexity"])
+    axes[1].set_title("PPL")
+    axes[2].plot(steps, history["lr"])
+    axes[2].set_title("LR")
     plt.tight_layout()
     plt.savefig(f"{save_dir}/curves_{variant}.png")
     plt.close()
 
-    print(f"  ✅ {variant} | PPL={metrics['perplexity']:.2f} | Params={metrics['params']:,}")
+    print(
+        f"  ✅ {variant} | PPL={metrics['perplexity']:.2f} | Params={metrics['params']:,}")
     return metrics
 
 
@@ -459,7 +465,8 @@ def _combine_and_plot(save_dir):
     import json
     import matplotlib.pyplot as plt
 
-    all_variants = ["gqa", "aft_full", "aft_local", "aft_simple", "aft_conv", "aft_rope_simple", "aft_decay"]
+    all_variants = ["gqa", "aft_full", "aft_local",
+                    "aft_simple", "aft_conv", "aft_rope_simple", "aft_decay"]
     all_metrics = []
 
     for variant in all_variants:
@@ -473,23 +480,26 @@ def _combine_and_plot(save_dir):
             print(f"  Missing: {variant} — skipping from plot")
 
     methods = [m["attention_type"] for m in all_metrics]
-    ppls    = [m["perplexity"]     for m in all_metrics]
-    params  = [m["params"] / 1e6   for m in all_metrics]
-    thrpts  = [m["throughput"]     for m in all_metrics]
-    mems    = [m["peak_mem_mb"]    for m in all_metrics]
+    ppls = [m["perplexity"] for m in all_metrics]
+    params = [m["params"] / 1e6 for m in all_metrics]
+    thrpts = [m["throughput"] for m in all_metrics]
+    mems = [m["peak_mem_mb"] for m in all_metrics]
 
     fig, axes = plt.subplots(1, 4, figsize=(22, 5))
-    fig.suptitle("AFT Variants vs GQA Baseline — WikiText-2 ctx=512", fontsize=12)
+    fig.suptitle(
+        "AFT Variants vs GQA Baseline — WikiText-2 ctx=512", fontsize=12)
     colors = plt.cm.tab10.colors
 
     for ax, vals, title, ylabel in zip(
         axes,
         [ppls, params, thrpts, mems],
-        ["Perplexity (↓ better)", "Params (M)", "Throughput tok/s (↑)", "Peak Mem MB (↓)"],
+        ["Perplexity (↓ better)", "Params (M)",
+         "Throughput tok/s (↑)", "Peak Mem MB (↓)"],
         ["PPL", "M", "tok/s", "MB"],
     ):
         bars = ax.bar(methods, vals, color=colors[:len(methods)])
-        ax.set_title(title); ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.set_ylabel(ylabel)
         ax.tick_params(axis="x", rotation=25)
         for bar, v in zip(bars, vals):
             ax.text(bar.get_x() + bar.get_width() / 2,
@@ -538,7 +548,8 @@ def run_aft_experiments(group: int | str = 1):
     train_tokens, val_tokens = tokenize_wikitext2(enc)
 
     for variant in AFT_GROUPS[group]:
-        _train_variant(variant, save_dir, enc, train_tokens, val_tokens, device)
+        _train_variant(variant, save_dir, enc,
+                       train_tokens, val_tokens, device)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
