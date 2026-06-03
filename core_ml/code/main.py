@@ -368,133 +368,113 @@ def _plot_ppl_vs_compute(metrics_list, attn, pos, ctx):
 
 
 #for bonus
-def run_aft_experiments():
-    """
-    Train all AFT variants + GQA baseline on WikiText-2 (ctx=512).
-    Saves per-variant metrics JSON and a combined comparison plot.
- 
-    Toggle RUN dict below to skip already-trained variants.
-    """
+GQA_BASELINE_METRICS = {
+    "val_loss": 5.004411822459737,
+    "perplexity": 149.06937810770194,
+    "throughput": 24490.552175430552,
+    "peak_mem_mb": 2788.248064,
+    "attention_type": "gqa",
+    "context_length": 512,
+    "params": 43848192,
+    "epoch_time_avg": 177.22496475059998,
+}
+
+# ── Group definitions ──────────────────────────────────────────────────────────
+# Group 1: aft_full + aft_simple   (one heavy O(T²), one O(T))
+# Group 2: aft_local + aft_conv    (one heavy O(T·w), one O(T))
+# Group 3: aft_rope_simple         (our custom variant)
+# combine: load all saved JSONs → comparison table + plot (no training)
+AFT_GROUPS = {
+    1: ["aft_full",  "aft_simple"],
+    2: ["aft_local", "aft_conv"],
+    3: ["aft_rope_simple"],
+}
+
+
+def _train_variant(variant, save_dir, enc, train_tokens, val_tokens, device):
+    import matplotlib.pyplot as plt
+    CONTEXT_LENGTH = 512
+    json_path = f"{save_dir}/metrics_{variant}.json"
+
+    # load from cache if available
+    try:
+        with open(json_path) as f:
+            m = json.load(f)
+        print(f"  Loaded cached: {variant}")
+        return m
+    except FileNotFoundError:
+        pass
+
+    cfg = TransformerConfig()
+    cfg.attention_type    = variant
+    cfg.pos_encoding_type = "learned"
+    cfg.context_length    = CONTEXT_LENGTH
+
+    # AFT-Full and AFT-Local need smaller batch (O(T²·d) tensor)
+    if variant in ("aft_full", "aft_local"):
+        cfg.batch_size = 2
+        cfg.max_epochs = 3
+
+    train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
+    model     = TransformerLM(cfg).to(device)
+    optimizer = build_optimizer(model, cfg)
+
+    history = train(model, cfg, train_loader, val_loader, optimizer, device)
+
+    metrics = evaluate(model, val_loader, device, max_iters=len(val_loader))
+    metrics["attention_type"] = variant
+    metrics["context_length"] = CONTEXT_LENGTH
+    metrics["params"]         = model.count_parameters()
+    metrics["epoch_time_avg"] = sum(history["epoch_time"]) / len(history["epoch_time"])
+    metrics["peak_mem_mb"]    = max(history["peak_mem_mb"]) if history["peak_mem_mb"] else 0.0
+
+    with open(json_path, "w") as f:
+        json.dump(metrics, f, indent=4)
+
+    torch.save(model.state_dict(), f"{save_dir}/model_{variant}.pt")
+
+    steps = history["step"]
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    axes[0].plot(steps, history["train_loss"], label="Train")
+    axes[0].plot(steps, history["val_loss"],   label="Val")
+    axes[0].legend(); axes[0].set_title(f"Loss — {variant}")
+    axes[1].plot(steps, history["perplexity"]); axes[1].set_title("PPL")
+    axes[2].plot(steps, history["lr"]);          axes[2].set_title("LR")
+    plt.tight_layout()
+    plt.savefig(f"{save_dir}/curves_{variant}.png")
+    plt.close()
+
+    print(f"  ✅ {variant} | PPL={metrics['perplexity']:.2f} | Params={metrics['params']:,}")
+    return metrics
+
+
+def _combine_and_plot(save_dir):
     import json
     import matplotlib.pyplot as plt
- 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Device: {device}")
- 
-    # ── variants to benchmark ──────────────────────────────────────
-    # Set False to load a pre-saved JSON instead of re-training
-    RUN = {
-        "gqa":             False,   # your best baseline from Part 2
-        "aft_full":        True,
-        "aft_local":       True,
-        "aft_simple":      True,
-        "aft_conv":        True,
-        "aft_rope_simple": True,
-    }
- 
-    CONTEXT_LENGTH = 512
-    save_dir = "experiments/aft"
-    os.makedirs(save_dir, exist_ok=True)
- 
-    # ── load data once ─────────────────────────────────────────────
-    enc = load_tokenizer()
-    train_tokens, val_tokens = tokenize_wikitext2(enc)
- 
+
+    all_variants = ["gqa", "aft_full", "aft_local", "aft_simple", "aft_conv", "aft_rope_simple"]
     all_metrics = []
- 
-    for variant, should_run in RUN.items():
-        json_path = f"{save_dir}/metrics_{variant}.json"
- 
-        if not should_run:
-            try:
-                with open(json_path) as f:
-                    m = json.load(f)
-                print(f"  Loaded cached: {variant}")
-                all_metrics.append(m)
-                continue
-            except FileNotFoundError:
-                if variant == "gqa":
-                    m = {
-                        "val_loss": 5.004411822459737,
-                        "perplexity": 149.06937810770194,
-                        "throughput": 24490.552175430552,
-                        "peak_mem_mb": 2788.248064,
-                        "attention_type": "gqa",
-                        "context_length": 512,
-                        "params": 43848192,
-                        "epoch_time_avg": 177.22496475059998,
-                    }
-                    print("  Using hardcoded GQA baseline metrics")
-                    all_metrics.append(m)
-                    continue
-                print(f"  No cache for {variant}, training now...")
- 
-        # ── build config ───────────────────────────────────────────
-        cfg = TransformerConfig()
-        cfg.attention_type    = variant
-        cfg.pos_encoding_type = "learned"
-        cfg.context_length    = CONTEXT_LENGTH
 
-        # AFT-Full and AFT-Local allocate (B, T, T, d) — reduce batch to avoid OOM
-        # Also cap epochs so total gradient updates ≈ other variants (batch_size=8)
-        if variant in ("aft_full", "aft_local"):
-            cfg.batch_size = 2
-            cfg.max_epochs = 3
+    for variant in all_variants:
+        if variant == "gqa":
+            all_metrics.append(GQA_BASELINE_METRICS)
+            continue
+        try:
+            with open(f"{save_dir}/metrics_{variant}.json") as f:
+                all_metrics.append(json.load(f))
+        except FileNotFoundError:
+            print(f"  Missing: {variant} — skipping from plot")
 
-        train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
-        model     = TransformerLM(cfg).to(device)
-        optimizer = build_optimizer(model, cfg)
- 
-        # ── train ──────────────────────────────────────────────────
-        history = train(model, cfg, train_loader, val_loader, optimizer, device)
- 
-        # ── evaluate ───────────────────────────────────────────────
-        metrics = evaluate(model, val_loader, device, max_iters=len(val_loader))
-        metrics["attention_type"]  = variant
-        metrics["context_length"]  = CONTEXT_LENGTH
-        metrics["params"]          = model.count_parameters()
-        metrics["epoch_time_avg"]  = (
-            sum(history["epoch_time"]) / len(history["epoch_time"])
-        )
-        metrics["peak_mem_mb"]     = (
-            max(history["peak_mem_mb"]) if history["peak_mem_mb"] else 0.0
-        )
- 
-        # save per-variant JSON
-        with open(json_path, "w") as f:
-            json.dump(metrics, f, indent=4)
- 
-        # save model
-        torch.save(model.state_dict(), f"{save_dir}/model_{variant}.pt")
- 
-        # save training curve plot for this variant
-        steps = history["step"]
-        fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-        axes[0].plot(steps, history["train_loss"], label="Train")
-        axes[0].plot(steps, history["val_loss"],   label="Val")
-        axes[0].legend(); axes[0].set_title(f"Loss — {variant}")
-        axes[1].plot(steps, history["perplexity"]); axes[1].set_title("PPL")
-        axes[2].plot(steps, history["lr"]);          axes[2].set_title("LR")
-        plt.tight_layout()
-        plt.savefig(f"{save_dir}/curves_{variant}.png")
-        plt.close()
- 
-        print(f"  ✅ {variant} | PPL={metrics['perplexity']:.2f} | "
-              f"Params={metrics['params']:,}")
- 
-        all_metrics.append(metrics)
- 
-    # ── combined comparison plot ────────────────────────────────────
     methods = [m["attention_type"] for m in all_metrics]
     ppls    = [m["perplexity"]     for m in all_metrics]
     params  = [m["params"] / 1e6   for m in all_metrics]
     thrpts  = [m["throughput"]     for m in all_metrics]
     mems    = [m["peak_mem_mb"]    for m in all_metrics]
- 
+
     fig, axes = plt.subplots(1, 4, figsize=(22, 5))
     fig.suptitle("AFT Variants vs GQA Baseline — WikiText-2 ctx=512", fontsize=12)
     colors = plt.cm.tab10.colors
- 
+
     for ax, vals, title, ylabel in zip(
         axes,
         [ppls, params, thrpts, mems],
@@ -506,14 +486,12 @@ def run_aft_experiments():
         ax.tick_params(axis="x", rotation=25)
         for bar, v in zip(bars, vals):
             ax.text(bar.get_x() + bar.get_width() / 2,
-                    bar.get_height() * 1.01,
-                    f"{v:.1f}", ha="center", fontsize=8)
- 
+                    bar.get_height() * 1.01, f"{v:.1f}", ha="center", fontsize=8)
+
     plt.tight_layout()
     plt.savefig(f"{save_dir}/comparison_aft.png", dpi=120)
     plt.close()
- 
-    # ── print table ────────────────────────────────────────────────
+
     print("\n" + "=" * 95)
     print(f"{'Variant':<20} {'PPL':>8} {'Params':>12} {'Thrpt':>10} {'Mem MB':>10} {'EpochT':>10}")
     print("-" * 95)
@@ -525,12 +503,35 @@ def run_aft_experiments():
               f"{m['peak_mem_mb']:>10.1f} "
               f"{m['epoch_time_avg']:>10.1f}")
     print("=" * 95)
- 
-    # ── save combined JSON ─────────────────────────────────────────
+
     with open(f"{save_dir}/all_metrics_aft.json", "w") as f:
         json.dump(all_metrics, f, indent=4)
- 
-    print(f"\n✅ AFT experiments complete → {save_dir}/")
+
+    print(f"\n✅ Combined plot saved → {save_dir}/comparison_aft.png")
+
+
+def run_aft_experiments(group: int | str = 1):
+    """
+    group=1  → train aft_full  + aft_simple
+    group=2  → train aft_local + aft_conv
+    group=3  → train aft_rope_simple
+    group='combine' → load all saved JSONs, make comparison table + plot
+    """
+    save_dir = "experiments/aft"
+    os.makedirs(save_dir, exist_ok=True)
+
+    if group == "combine":
+        _combine_and_plot(save_dir)
+        return
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Device: {device}  |  Group {group}: {AFT_GROUPS[group]}")
+
+    enc = load_tokenizer()
+    train_tokens, val_tokens = tokenize_wikitext2(enc)
+
+    for variant in AFT_GROUPS[group]:
+        _train_variant(variant, save_dir, enc, train_tokens, val_tokens, device)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -538,6 +539,11 @@ def run_aft_experiments():
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--aft-group", type=str, default=None,
+                        help="1 | 2 | 3 | combine")
+    args = parser.parse_args()
 
     # ── Set exactly ONE of these to True ────────────────────────────────
     RUN_ATTENTION = False   # Part 1 & 2: single attention run
@@ -553,7 +559,9 @@ if __name__ == "__main__":
     elif RUN_HYBRID:
         run_hybrid_experiments()
     elif RUN_AFT:
-        run_aft_experiments()
+        g = args.aft_group
+        group = int(g) if g and g.isdigit() else (g if g else 1)
+        run_aft_experiments(group=group)
     else:
         print(
             "Nothing to run. Set one of RUN_ATTENTION / RUN_POSITIONAL / RUN_HYBRID = True")
