@@ -47,6 +47,9 @@ class TransformerConfig:
     conv_type:        str = "none"
     conv_kernel_size: int = 3
 
+    #aft attention (bonus of core ml)
+    aft_local_window: int = 64
+
     # ── Training ─────────────────────────────────────────────────────────────
     batch_size:    int   = 8
     learning_rate: float = 3e-4
