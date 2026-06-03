@@ -436,8 +436,10 @@ def run_aft_experiments():
         cfg.context_length    = CONTEXT_LENGTH
 
         # AFT-Full and AFT-Local allocate (B, T, T, d) — reduce batch to avoid OOM
+        # Also cap epochs so total gradient updates ≈ other variants (batch_size=8)
         if variant in ("aft_full", "aft_local"):
             cfg.batch_size = 2
+            cfg.max_epochs = 3
 
         train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
         model     = TransformerLM(cfg).to(device)
