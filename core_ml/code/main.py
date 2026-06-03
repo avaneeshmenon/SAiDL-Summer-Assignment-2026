@@ -437,7 +437,7 @@ def run_aft_experiments():
 
         # AFT-Full and AFT-Local allocate (B, T, T, d) — reduce batch to avoid OOM
         if variant in ("aft_full", "aft_local"):
-            cfg.batch_size = 4
+            cfg.batch_size = 2
 
         train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
         model     = TransformerLM(cfg).to(device)
