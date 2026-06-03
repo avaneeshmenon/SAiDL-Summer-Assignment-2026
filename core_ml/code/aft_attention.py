@@ -446,16 +446,19 @@ class AFTDecay(nn.Module):
         gate = torch.sigmoid(self.gate(x))    # (B, T, d) ∈ (0, 1)
         exp_k = torch.exp(k)                  # (B, T, d)
 
-        h = torch.zeros(B, d, device=x.device, dtype=x.dtype)
-        z = torch.zeros(B, d, device=x.device, dtype=x.dtype)
-        outs = []
+        # Parallel prefix scan — no Python loop over T.
+        # Recurrence h[t] = gate[t]*h[t-1] + u[t] has closed form:
+        #   h[t] = cp[t] * cumsum(u / cp)[t]
+        # where cp[t] = gate[0]*...*gate[t] (cumulative product).
+        # Computed in log-space for numerical stability.
+        log_cp  = torch.cumsum(torch.log(gate.clamp(min=1e-8)), dim=1)
+        cp      = torch.exp(log_cp.clamp(-30, 30))      # (B, T, d)
+        inv_cp  = torch.exp(-log_cp.clamp(-30, 30))     # (B, T, d)
 
-        for t in range(T):
-            h = gate[:, t] * h + exp_k[:, t] * v[:, t]
-            z = gate[:, t] * z + exp_k[:, t]
-            outs.append(torch.sigmoid(q[:, t]) * (h / (z + 1e-9)))
+        h = cp * torch.cumsum(exp_k * v * inv_cp, dim=1)   # (B, T, d)
+        z = cp * torch.cumsum(exp_k     * inv_cp, dim=1)   # (B, T, d)
 
-        return self.out(torch.stack(outs, dim=1))
+        return self.out(torch.sigmoid(q) * (h / (z + 1e-9)))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
