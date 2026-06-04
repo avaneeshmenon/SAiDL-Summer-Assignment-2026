@@ -4,14 +4,14 @@ from dataclasses import dataclass, field
 @dataclass
 class TransformerConfig:
     # ── Vocabulary / sequence ────────────────────────────────────────────────
-    vocab_size:      int   = 50257
-    context_length:  int   = 1024
+    vocab_size:      int = 50257
+    context_length:  int = 1024
 
     # ── Architecture ─────────────────────────────────────────────────────────
-    n_layers:  int   = 6
-    n_heads:   int   = 8
-    d_model:   int   = 512
-    d_ff:      int   = 2048
+    n_layers:  int = 6
+    n_heads:   int = 8
+    d_model:   int = 512
+    d_ff:      int = 2048
     dropout:   float = 0.1
 
     # ── Attention variant ────────────────────────────────────────────────────
@@ -47,15 +47,15 @@ class TransformerConfig:
     conv_type:        str = "none"
     conv_kernel_size: int = 3
 
-    #aft attention (bonus of core ml)
+    # aft attention (bonus of core ml)
     aft_local_window: int = 64
 
     # ── Training ─────────────────────────────────────────────────────────────
-    batch_size:    int   = 8
+    batch_size:    int = 8
     learning_rate: float = 3e-4
     weight_decay:  float = 0.1
-    max_epochs:    int   = 10
-    warmup_steps:  int   = 200
+    max_epochs:    int = 10
+    warmup_steps:  int = 200
     grad_clip:     float = 1.0
-    eval_interval: int   = 100
-    eval_iters:    int   = 50
+    eval_interval: int = 100
+    eval_iters:    int = 50

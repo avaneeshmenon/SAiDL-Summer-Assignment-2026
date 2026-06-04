@@ -188,7 +188,7 @@ def run_single_positional():
     print(f"Using device: {device}")
 
     # ── CHANGE THIS EACH RUN ─────────────────────────────────────────────
-    POS_TYPE = "sinusoidal"   # learned | sinusoidal | rope | rope_interp |
+    POS_TYPE = "rope_interp"   # learned | sinusoidal | rope | rope_interp |
     # alibi   | relative
     # ─────────────────────────────────────────────────────────────────────
 
@@ -202,8 +202,8 @@ def run_single_positional():
         cfg.attention_type = POS_TYPE
         cfg.pos_encoding_type = POS_TYPE
     elif POS_TYPE == "rope_interp":
-        cfg.attention_type = "rope"
-        cfg.pos_encoding_type = "rope"
+        cfg.attention_type = "rope_interp"
+        cfg.pos_encoding_type = "rope_interp"
     else:
         cfg.attention_type = "standard"
         cfg.pos_encoding_type = POS_TYPE
