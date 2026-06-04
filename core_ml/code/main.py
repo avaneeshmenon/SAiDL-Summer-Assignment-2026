@@ -190,11 +190,11 @@ def run_single_positional():
     # ── CHANGE THIS EACH RUN ─────────────────────────────────────────────
     POS_TYPE = "rope_interp"   # learned | sinusoidal | rope | rope_interp |
     # alibi   | relative
+    EVAL_ONLY = True           # True = skip training, load saved weights
     # ─────────────────────────────────────────────────────────────────────
 
     cfg = TransformerConfig()
     cfg.context_length = 512
-    cfg.rope_scale = 1.0
     cfg.conv_type = "none"
 
     # Wire attention_type to match positional encoding
@@ -208,34 +208,74 @@ def run_single_positional():
         cfg.attention_type = "standard"
         cfg.pos_encoding_type = POS_TYPE
 
-    print(f"\nRunning positional: {POS_TYPE} | ctx=512\n")
-
     enc = load_tokenizer()
     train_tokens, val_tokens = tokenize_wikitext2(enc)
-    train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
-
-    model = TransformerLM(cfg).to(device)
-    optimizer = build_optimizer(model, cfg)
-    history = train(model, cfg, train_loader, val_loader, optimizer, device)
-
-    final = evaluate(model, val_loader, device, max_iters=len(val_loader))
-    final["model"] = POS_TYPE
-    final["pos_type"] = POS_TYPE
-    final["train_ctx"] = 512
-    final["context_length"] = 512
-    final["params"] = model.count_parameters()
-    final["epoch_time_avg"] = sum(
-        history["epoch_time"]) / len(history["epoch_time"])
-    final["peak_mem_mb"] = max(
-        history["peak_mem_mb"]) if history["peak_mem_mb"] else 0.0
 
     save_dir = f"experiments/positional/{POS_TYPE}_ctx512"
-    run_tag = f"{POS_TYPE}_512"
-    generated = save_run(model, enc, cfg, history, final,
-                         save_dir, run_tag, device)
+    run_tag  = f"{POS_TYPE}_512"
 
-    print_positional_table([final])
-    print("\nSample:\n", generated)
+    model = TransformerLM(cfg).to(device)
+
+    if EVAL_ONLY:
+        weights_path = f"{save_dir}/model_{run_tag}.pt"
+        model.load_state_dict(torch.load(weights_path, map_location=device))
+        print(f"\nLoaded weights from {weights_path} — skipping training\n")
+    else:
+        print(f"\nRunning positional: {POS_TYPE} | ctx=512\n")
+        train_loader, val_loader = build_loaders(cfg, train_tokens, val_tokens)
+        optimizer = build_optimizer(model, cfg)
+        history = train(model, cfg, train_loader, val_loader, optimizer, device)
+
+        val_loader = build_loaders(cfg, train_tokens, val_tokens)[1]
+        final = evaluate(model, val_loader, device, max_iters=len(val_loader))
+        final["model"] = POS_TYPE
+        final["pos_type"] = POS_TYPE
+        final["train_ctx"] = 512
+        final["context_length"] = 512
+        final["params"] = model.count_parameters()
+        final["epoch_time_avg"] = sum(history["epoch_time"]) / len(history["epoch_time"])
+        final["peak_mem_mb"] = max(history["peak_mem_mb"]) if history["peak_mem_mb"] else 0.0
+        generated = save_run(model, enc, cfg, history, final, save_dir, run_tag, device)
+        print_positional_table([final])
+        print("\nSample:\n", generated)
+
+    # ── Extrapolation: evaluate trained model at longer contexts ─────────
+    # No retraining — same weights, just longer val sequences
+    # Skipped for "learned" (fixed-size embedding table can't handle ctx>512)
+    if POS_TYPE == "learned":
+        return
+
+    extrap_results = []
+    for test_ctx in [512, 1024, 2048]:
+        cfg.context_length = test_ctx
+        _, val_loader_ext = build_loaders(cfg, train_tokens, val_tokens)
+        m = evaluate(model, val_loader_ext, device, max_iters=len(val_loader_ext))
+        m["pos_type"]  = POS_TYPE
+        m["train_ctx"] = 512
+        m["test_ctx"]  = test_ctx
+        extrap_results.append(m)
+        print(f"  [extrap] test_ctx={test_ctx} | PPL={m['perplexity']:.2f}")
+
+    with open(f"{save_dir}/extrapolation_{POS_TYPE}.json", "w") as f:
+        json.dump(extrap_results, f, indent=4)
+    print_positional_table(extrap_results)
+
+    # ── Extrapolation plot ───────────────────────────────────────────────
+    ctxs  = [m["test_ctx"]   for m in extrap_results]
+    ppls  = [m["perplexity"] for m in extrap_results]
+    _, ax = plt.subplots(figsize=(9, 5))
+    ax.plot(ctxs, ppls, marker="o", label=POS_TYPE)
+    ax.set_yscale("log")
+    ax.set_xlabel("Context Length")
+    ax.set_ylabel("Perplexity (log scale)")
+    ax.set_title("Extrapolation Performance")
+    ax.legend()
+    ax.grid(True, axis="x")
+    plt.tight_layout()
+    plot_path = f"{save_dir}/extrapolation_{POS_TYPE}.png"
+    plt.savefig(plot_path, dpi=120)
+    plt.close()
+    print(f"  Extrapolation plot saved → {plot_path}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
