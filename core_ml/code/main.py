@@ -564,8 +564,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # ── Set exactly ONE of these to True ────────────────────────────────
-    RUN_ATTENTION = True   # Part 1 & 2: single attention run
-    RUN_POSITIONAL = False   # Part 3:     single positional run
+    RUN_ATTENTION = False   # Part 1 & 2: single attention run
+    RUN_POSITIONAL = True   # Part 3:     single positional run
     RUN_HYBRID = False    # Part 4:     all hybrid designs
     RUN_AFT = False
     # ─────────────────────────────────────────────────────────────────────
