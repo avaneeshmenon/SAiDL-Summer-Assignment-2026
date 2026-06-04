@@ -1,0 +1,75 @@
+[
+    {
+        "val_loss": 5.004411822459737,
+        "perplexity": 149.06937810770194,
+        "throughput": 24490.552175430552,
+        "peak_mem_mb": 2788.248064,
+        "model": "none",
+        "conv_type": "none",
+        "attention_type": "gqa + rel baseline",
+        "pos_type": "relative",
+        "context_length": 512,
+        "params": 43848192,
+        "epoch_time_avg": 177.22496475059998
+    },
+    {
+        "val_loss": 5.775530401080724,
+        "perplexity": 322.3153457965038,
+        "throughput": 4521.227685887363,
+        "peak_mem_mb": 3233.104384,
+        "attention_type": "aft_full",
+        "context_length": 512,
+        "params": 46469632,
+        "epoch_time_avg": 1630.9533077076667
+    },
+    {
+        "val_loss": 5.252131110332051,
+        "perplexity": 190.97281925071243,
+        "throughput": 31702.141912858435,
+        "peak_mem_mb": 2803.485184,
+        "attention_type": "aft_simple",
+        "context_length": 512,
+        "params": 44896768,
+        "epoch_time_avg": 132.06108745289993
+    },
+    {
+        "val_loss": 5.776367,
+        "perplexity": 322.59,
+        "throughput": 4514.0,
+        "peak_mem_mb": 3233.104384,
+        "attention_type": "aft_local",
+        "context_length": 512,
+        "params": 46469632,
+        "epoch_time_avg": 1612.5
+    },
+    {
+        "val_loss": 5.757971510475064,
+        "perplexity": 316.705243623289,
+        "throughput": 4468.244697937733,
+        "peak_mem_mb": 3220.570624,
+        "attention_type": "aft_conv",
+        "context_length": 512,
+        "params": 44899840,
+        "epoch_time_avg": 1893.6946054886664
+    },
+    {
+        "val_loss": 5.3045561665394265,
+        "perplexity": 201.2516603678009,
+        "throughput": 27791.175441515716,
+        "peak_mem_mb": 2805.031424,
+        "attention_type": "aft_rope_simple",
+        "context_length": 512,
+        "params": 44896768,
+        "epoch_time_avg": 144.5104639405
+    },
+    {
+        "val_loss": 5.2526971863918615,
+        "perplexity": 191.08095499540525,
+        "throughput": 29768.655777144566,
+        "peak_mem_mb": 2830.240256,
+        "attention_type": "aft_decay",
+        "context_length": 512,
+        "params": 46472704,
+        "epoch_time_avg": 149.9272703495
+    }
+]

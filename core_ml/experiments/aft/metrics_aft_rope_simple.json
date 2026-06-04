@@ -1,0 +1,10 @@
+{
+    "val_loss": 5.3045561665394265,
+    "perplexity": 201.2516603678009,
+    "throughput": 27791.175441515716,
+    "peak_mem_mb": 2805.031424,
+    "attention_type": "aft_rope_simple",
+    "context_length": 512,
+    "params": 44896768,
+    "epoch_time_avg": 144.5104639405
+}
