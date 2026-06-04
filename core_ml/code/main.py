@@ -388,7 +388,7 @@ AFT_GROUPS = {
     1: ["aft_full",  "aft_simple"],
     2: ["aft_local", "aft_conv"],
     3: ["aft_rope_simple"],
-    4: ["aft_conv"],
+    4: ["aft_decay"],
 }
 
 
@@ -564,10 +564,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # ── Set exactly ONE of these to True ────────────────────────────────
-    RUN_ATTENTION = False   # Part 1 & 2: single attention run
+    RUN_ATTENTION = True   # Part 1 & 2: single attention run
     RUN_POSITIONAL = False   # Part 3:     single positional run
     RUN_HYBRID = False    # Part 4:     all hybrid designs
-    RUN_AFT = True
+    RUN_AFT = False
     # ─────────────────────────────────────────────────────────────────────
 
     if RUN_ATTENTION:

@@ -33,12 +33,12 @@ class PositionalBias(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.pos_type = getattr(cfg, "pos_encoding_type", "none")
-        self.d_head   = cfg.d_model // cfg.n_heads
-        self.n_heads  = cfg.n_heads
+        self.d_head = cfg.d_model // cfg.n_heads
+        self.n_heads = cfg.n_heads
 
         # ── RoPE buffers ──────────────────────────────────────────────────
         if self.pos_type in ("rope", "rope_interp"):
-            base     = 10000.0
+            base = 10000.0
             inv_freq = 1.0 / (
                 base ** (torch.arange(0, self.d_head, 2).float() / self.d_head)
             )
@@ -55,15 +55,15 @@ class PositionalBias(nn.Module):
         # ── Relative positional embeddings ────────────────────────────────
         elif self.pos_type == "relative":
             self.max_dist = 4096
-            self.rel_emb  = nn.Embedding(self.max_dist, self.d_head)
+            self.rel_emb = nn.Embedding(self.max_dist, self.d_head)
 
     # ── RoPE helpers ──────────────────────────────────────────────────────
 
     def _get_cos_sin(self, T, device):
         scale = self.rope_scale if self.pos_type == "rope_interp" else 1.0
-        t     = torch.arange(T, device=device) * scale
+        t = torch.arange(T, device=device) * scale
         freqs = torch.outer(t, self.inv_freq)
-        emb   = torch.cat([freqs, freqs], dim=-1)
+        emb = torch.cat([freqs, freqs], dim=-1)
         return emb.cos()[None, None, :, :], emb.sin()[None, None, :, :]
 
     @staticmethod
@@ -92,15 +92,15 @@ class PositionalBias(nn.Module):
         q      shape: (B, n_heads, T, d_head)
         """
         if self.pos_type == "alibi":
-            pos  = torch.arange(T, device=device)
+            pos = torch.arange(T, device=device)
             dist = (pos[None, :] - pos[:, None]).clamp(min=0)
             bias = -self.slopes[:, None, None] * dist   # (n_heads, T, T)
             scores = scores + bias.unsqueeze(0)
 
         elif self.pos_type == "relative":
-            idx   = torch.arange(T, device=device)
-            dist  = (idx[:, None] - idx[None, :]).clamp(0, self.max_dist - 1)
-            rel   = self.rel_emb(dist)                  # (T, T, d_head)
+            idx = torch.arange(T, device=device)
+            dist = (idx[:, None] - idx[None, :]).clamp(0, self.max_dist - 1)
+            rel = self.rel_emb(dist)                  # (T, T, d_head)
             # q: (B, n_heads, T, d_head) → rel_scores: (B, n_heads, T, T)
             rel_scores = torch.einsum("bhid,ijd->bhij", q, rel)
             scores = scores + rel_scores
@@ -116,12 +116,12 @@ class StandardMultiHeadAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.n_heads = cfg.n_heads
-        self.d_head  = cfg.d_model // cfg.n_heads
+        self.d_head = cfg.d_model // cfg.n_heads
         self.d_model = cfg.d_model
         self.dropout = cfg.dropout
 
-        self.qkv    = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
-        self.out    = nn.Linear(cfg.d_model, cfg.d_model,     bias=False)
+        self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
+        self.out = nn.Linear(cfg.d_model, cfg.d_model,     bias=False)
         self.posbias = PositionalBias(cfg)
 
     def forward(self, x):
@@ -136,13 +136,14 @@ class StandardMultiHeadAttention(nn.Module):
 
         pos_type = getattr(self.posbias, "pos_type", "none")
         if pos_type in ("alibi", "relative"):
-            scale  = self.d_head ** -0.5
+            scale = self.d_head ** -0.5
             scores = (q @ k.transpose(-2, -1)) * scale
             scores = self.posbias.apply_to_scores(scores, q, T, x.device)
-            mask   = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
+            mask = torch.triu(torch.ones(
+                T, T, device=x.device), diagonal=1).bool()
             scores = scores.masked_fill(mask, float("-inf"))
-            attn   = F.softmax(scores, dim=-1)
-            out    = attn @ v
+            attn = F.softmax(scores, dim=-1)
+            out = attn @ v
         else:
             out = F.scaled_dot_product_attention(
                 q, k, v,
@@ -160,13 +161,13 @@ class StandardMultiHeadAttention(nn.Module):
 class SlidingWindowAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        self.window  = getattr(cfg, "window_size", 128)
+        self.window = getattr(cfg, "window_size", 128)
         self.n_heads = cfg.n_heads
-        self.d_head  = cfg.d_model // cfg.n_heads
+        self.d_head = cfg.d_model // cfg.n_heads
         self.d_model = cfg.d_model
 
-        self.qkv     = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
-        self.out     = nn.Linear(cfg.d_model, cfg.d_model,     bias=False)
+        self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
+        self.out = nn.Linear(cfg.d_model, cfg.d_model,     bias=False)
         self.posbias = PositionalBias(cfg)
 
     def forward(self, x):
@@ -185,15 +186,16 @@ class SlidingWindowAttention(nn.Module):
             mask[i, start:i+1] = 0
         mask = mask.unsqueeze(0).unsqueeze(0)
 
-        scale  = self.d_head ** -0.5
+        scale = self.d_head ** -0.5
         scores = (q @ k.transpose(-2, -1)) * scale
         scores = self.posbias.apply_to_scores(scores, q, T, x.device)
         scores = scores + mask
 
-        causal_mask = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
-        scores      = scores.masked_fill(causal_mask, float("-inf"))
-        attn        = F.softmax(scores, dim=-1)
-        out         = attn @ v
+        causal_mask = torch.triu(torch.ones(
+            T, T, device=x.device), diagonal=1).bool()
+        scores = scores.masked_fill(causal_mask, float("-inf"))
+        attn = F.softmax(scores, dim=-1)
+        out = attn @ v
 
         return self.out(out.transpose(1, 2).reshape(B, T, C))
 
@@ -205,13 +207,13 @@ class SlidingWindowAttention(nn.Module):
 class SparseBlockAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        self.block   = getattr(cfg, "block_size", 64)
+        self.block = getattr(cfg, "block_size", 64)
         self.n_heads = cfg.n_heads
-        self.d_head  = cfg.d_model // cfg.n_heads
+        self.d_head = cfg.d_model // cfg.n_heads
         self.d_model = cfg.d_model
 
-        self.qkv     = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
-        self.out     = nn.Linear(cfg.d_model, cfg.d_model,     bias=False)
+        self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
+        self.out = nn.Linear(cfg.d_model, cfg.d_model,     bias=False)
         self.posbias = PositionalBias(cfg)
 
     def forward(self, x):
@@ -227,21 +229,22 @@ class SparseBlockAttention(nn.Module):
         mask = torch.full((T, T), float("-inf"), device=x.device)
         for i in range(T):
             block_id = i // self.block
-            start    = block_id * self.block
+            start = block_id * self.block
             mask[i, start:i+1] = 0
             for b in range(block_id):
                 mask[i, (b+1)*self.block - 1] = 0
         mask = mask.unsqueeze(0).unsqueeze(0)
 
-        scale  = self.d_head ** -0.5
+        scale = self.d_head ** -0.5
         scores = (q @ k.transpose(-2, -1)) * scale
         scores = self.posbias.apply_to_scores(scores, q, T, x.device)
         scores = scores + mask
 
-        causal_mask = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
-        scores      = scores.masked_fill(causal_mask, float("-inf"))
-        attn        = F.softmax(scores, dim=-1)
-        out         = attn @ v
+        causal_mask = torch.triu(torch.ones(
+            T, T, device=x.device), diagonal=1).bool()
+        scores = scores.masked_fill(causal_mask, float("-inf"))
+        attn = F.softmax(scores, dim=-1)
+        out = attn @ v
 
         return self.out(out.transpose(1, 2).reshape(B, T, C))
 
@@ -254,12 +257,12 @@ class GroupedQueryAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.n_heads = cfg.n_heads
-        self.n_kv    = max(1, cfg.n_heads // 4)
-        self.d_head  = cfg.d_model // cfg.n_heads
+        self.n_kv = max(1, cfg.n_heads // 4)
+        self.d_head = cfg.d_model // cfg.n_heads
 
-        self.q   = nn.Linear(cfg.d_model, cfg.d_model,          bias=False)
-        self.k   = nn.Linear(cfg.d_model, self.n_kv * self.d_head, bias=False)
-        self.v   = nn.Linear(cfg.d_model, self.n_kv * self.d_head, bias=False)
+        self.q = nn.Linear(cfg.d_model, cfg.d_model,          bias=False)
+        self.k = nn.Linear(cfg.d_model, self.n_kv * self.d_head, bias=False)
+        self.v = nn.Linear(cfg.d_model, self.n_kv * self.d_head, bias=False)
         self.out = nn.Linear(cfg.d_model, cfg.d_model,          bias=False)
 
         self.posbias = PositionalBias(cfg)
@@ -278,13 +281,14 @@ class GroupedQueryAttention(nn.Module):
 
         pos_type = getattr(self.posbias, "pos_type", "none")
         if pos_type in ("alibi", "relative"):
-            scale  = self.d_head ** -0.5
+            scale = self.d_head ** -0.5
             scores = (q @ k.transpose(-2, -1)) * scale
             scores = self.posbias.apply_to_scores(scores, q, T, x.device)
-            mask   = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
+            mask = torch.triu(torch.ones(
+                T, T, device=x.device), diagonal=1).bool()
             scores = scores.masked_fill(mask, float("-inf"))
-            attn   = F.softmax(scores, dim=-1)
-            out    = attn @ v
+            attn = F.softmax(scores, dim=-1)
+            out = attn @ v
         else:
             out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
 
@@ -299,12 +303,12 @@ class MultiQueryAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.n_heads = cfg.n_heads
-        self.n_kv    = 1
-        self.d_head  = cfg.d_model // cfg.n_heads
+        self.n_kv = 1
+        self.d_head = cfg.d_model // cfg.n_heads
 
-        self.q   = nn.Linear(cfg.d_model, cfg.d_model,          bias=False)
-        self.k   = nn.Linear(cfg.d_model, self.n_kv * self.d_head, bias=False)
-        self.v   = nn.Linear(cfg.d_model, self.n_kv * self.d_head, bias=False)
+        self.q = nn.Linear(cfg.d_model, cfg.d_model,          bias=False)
+        self.k = nn.Linear(cfg.d_model, self.n_kv * self.d_head, bias=False)
+        self.v = nn.Linear(cfg.d_model, self.n_kv * self.d_head, bias=False)
         self.out = nn.Linear(cfg.d_model, cfg.d_model,          bias=False)
 
         self.posbias = PositionalBias(cfg)
@@ -323,13 +327,14 @@ class MultiQueryAttention(nn.Module):
 
         pos_type = getattr(self.posbias, "pos_type", "none")
         if pos_type in ("alibi", "relative"):
-            scale  = self.d_head ** -0.5
+            scale = self.d_head ** -0.5
             scores = (q @ k.transpose(-2, -1)) * scale
             scores = self.posbias.apply_to_scores(scores, q, T, x.device)
-            mask   = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
+            mask = torch.triu(torch.ones(
+                T, T, device=x.device), diagonal=1).bool()
             scores = scores.masked_fill(mask, float("-inf"))
-            attn   = F.softmax(scores, dim=-1)
-            out    = attn @ v
+            attn = F.softmax(scores, dim=-1)
+            out = attn @ v
         else:
             out = F.scaled_dot_product_attention(q, k, v, is_causal=True)
 
@@ -346,7 +351,7 @@ class RoPEAttention(nn.Module):
     def __init__(self, cfg, base=10000.0):
         super().__init__()
         self.n_heads = cfg.n_heads
-        self.d_head  = cfg.d_model // cfg.n_heads
+        self.d_head = cfg.d_model // cfg.n_heads
         self.d_model = cfg.d_model
         self.dropout = cfg.dropout
 
@@ -359,9 +364,9 @@ class RoPEAttention(nn.Module):
         self.register_buffer("inv_freq", inv_freq)
 
     def _get_cos_sin(self, T, device):
-        t     = torch.arange(T, device=device)
+        t = torch.arange(T, device=device)
         freqs = torch.outer(t, self.inv_freq)
-        emb   = torch.cat([freqs, freqs], dim=-1)
+        emb = torch.cat([freqs, freqs], dim=-1)
         return emb.cos()[None, None, :, :], emb.sin()[None, None, :, :]
 
     def _rotate_half(self, x):
@@ -395,9 +400,9 @@ class RoPEWithInterpolation(RoPEAttention):
         self.scale = getattr(cfg, "rope_scale", 1.0)
 
     def _get_cos_sin(self, T, device):
-        t     = torch.arange(T, device=device) * self.scale
+        t = torch.arange(T, device=device) * self.scale
         freqs = torch.outer(t, self.inv_freq)
-        emb   = torch.cat([freqs, freqs], dim=-1)
+        emb = torch.cat([freqs, freqs], dim=-1)
         return emb.cos()[None, None, :, :], emb.sin()[None, None, :, :]
 
 
@@ -410,7 +415,7 @@ class ALiBiAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.n_heads = cfg.n_heads
-        self.d_head  = cfg.d_model // cfg.n_heads
+        self.d_head = cfg.d_model // cfg.n_heads
         self.d_model = cfg.d_model
 
         self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
@@ -429,18 +434,18 @@ class ALiBiAttention(nn.Module):
         k = reshape_heads(k, B, T, self.n_heads, self.d_head)
         v = reshape_heads(v, B, T, self.n_heads, self.d_head)
 
-        scale  = self.d_head ** -0.5
+        scale = self.d_head ** -0.5
         scores = (q @ k.transpose(-2, -1)) * scale
 
-        pos    = torch.arange(T, device=x.device)
-        dist   = (pos[None, :] - pos[:, None]).clamp(min=0)
-        bias   = -self.slopes[:, None, None] * dist
+        pos = torch.arange(T, device=x.device)
+        dist = (pos[None, :] - pos[:, None]).clamp(min=0)
+        bias = -self.slopes[:, None, None] * dist
         scores = scores + bias.unsqueeze(0)
 
-        mask   = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
+        mask = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
         scores = scores.masked_fill(mask, float("-inf"))
-        attn   = F.softmax(scores, dim=-1)
-        out    = attn @ v
+        attn = F.softmax(scores, dim=-1)
+        out = attn @ v
 
         return self.out(out.transpose(1, 2).reshape(B, T, C))
 
@@ -454,13 +459,13 @@ class RelativePositionalAttention(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.n_heads = cfg.n_heads
-        self.d_head  = cfg.d_model // cfg.n_heads
+        self.d_head = cfg.d_model // cfg.n_heads
         self.d_model = cfg.d_model
 
-        self.qkv      = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
-        self.out      = nn.Linear(cfg.d_model, cfg.d_model,     bias=False)
+        self.qkv = nn.Linear(cfg.d_model, 3 * cfg.d_model, bias=False)
+        self.out = nn.Linear(cfg.d_model, cfg.d_model,     bias=False)
         self.max_dist = 4096
-        self.rel_emb  = nn.Embedding(self.max_dist, self.d_head)
+        self.rel_emb = nn.Embedding(self.max_dist, self.d_head)
 
     def forward(self, x):
         B, T, C = x.shape
@@ -470,19 +475,19 @@ class RelativePositionalAttention(nn.Module):
         k = reshape_heads(k, B, T, self.n_heads, self.d_head)
         v = reshape_heads(v, B, T, self.n_heads, self.d_head)
 
-        scale  = self.d_head ** -0.5
+        scale = self.d_head ** -0.5
         scores = (q @ k.transpose(-2, -1)) * scale
 
-        idx        = torch.arange(T, device=x.device)
-        dist       = (idx[:, None] - idx[None, :]).clamp(0, self.max_dist - 1)
-        rel        = self.rel_emb(dist)
+        idx = torch.arange(T, device=x.device)
+        dist = (idx[:, None] - idx[None, :]).clamp(0, self.max_dist - 1)
+        rel = self.rel_emb(dist)
         rel_scores = torch.einsum("bhid,ijd->bhij", q, rel)
-        scores     = scores + rel_scores
+        scores = scores + rel_scores
 
-        mask   = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
+        mask = torch.triu(torch.ones(T, T, device=x.device), diagonal=1).bool()
         scores = scores.masked_fill(mask, float("-inf"))
-        attn   = F.softmax(scores, dim=-1)
-        out    = attn @ v
+        attn = F.softmax(scores, dim=-1)
+        out = attn @ v
 
         return self.out(out.transpose(1, 2).reshape(B, T, C))
 

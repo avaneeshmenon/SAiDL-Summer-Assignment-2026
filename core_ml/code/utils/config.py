@@ -25,7 +25,7 @@ class TransformerConfig:
     pos_encoding_type: str = "learned"
 
     # Only used for rope_interp; scale < 1.0 compresses positions for extension
-    rope_scale: float = 1.0
+    rope_scale: float = 0.25
 
     # ── Convolution hybrid (Part 4) ──────────────────────────────────────────
     #
