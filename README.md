@@ -109,15 +109,20 @@ Within each part, individual methods can be toggled independently (e.g. `RUN_LOR
 
 **Sparsity Part 3** — SoRA applied to xLSTM and Mamba.
 
-### Dependencies
+### Dependencies (requirements.txt)
 
 ```
-torch torchvision
-transformers datasets peft
+torch
+torchvision
+numpy
+transformers
+datasets
+peft
 tiktoken
 xlstm
+mamba-ssm
 scikit-learn
 matplotlib
 ```
 
-Mamba requires `mamba-ssm` (CUDA build). If unavailable, `part3.py` automatically falls back to a minimal pure-PyTorch S6 implementation.
+`mamba-ssm` requires a CUDA build. If unavailable, `part3.py` automatically falls back to a minimal pure-PyTorch S6 implementation.

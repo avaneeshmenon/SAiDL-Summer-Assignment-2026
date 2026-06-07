@@ -1,6 +1,11 @@
-torch torchvision
-transformers datasets peft
+torch
+torchvision
+numpy
+transformers
+datasets
+peft
 tiktoken
 xlstm
+mamba-ssm
 scikit-learn
 matplotlib
