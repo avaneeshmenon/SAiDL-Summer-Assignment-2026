@@ -122,7 +122,7 @@ def save_run(model, enc, cfg, history, final_metrics, save_dir, run_tag, device)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Part 1 & 2 — Attention experiments  (one run at a time)
+# Part 1 & 2 — Attention experiments 
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_single_attention():
@@ -136,7 +136,7 @@ def run_single_attention():
 
     # ── CHANGE THESE EACH RUN ────────────────────────────────────────────
     ATTN_TYPE = "standard"   # standard | sliding_window | sparse_block |
-    # linear   | gqa | mqa | softmax_free
+    # gqa | mqa |
     CTX = 512           # 512 | 1024 | 2048
     # ─────────────────────────────────────────────────────────────────────
 
@@ -175,7 +175,7 @@ def run_single_attention():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Part 3 — Positional encoding experiments  (one run at a time)
+# Part 3 — Positional encoding experiments
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_single_positional():
@@ -249,7 +249,7 @@ def run_hybrid_experiments():
     print(f"Using device: {device}")
 
     # ── Set to your Part 2 / Part 3 winners ──────────────────────────────
-    BEST_ATTN = "gqa"
+    BEST_ATTN = "gqa"    # ← change if different
     BEST_POS = "relative"   # ← change if different
     CTX = 512
     KERNEL = 3
@@ -578,4 +578,4 @@ if __name__ == "__main__":
         run_aft_experiments(group=group)
     else:
         print(
-            "Nothing to run. Set one of RUN_ATTENTION / RUN_POSITIONAL / RUN_HYBRID = True")
+            "Nothing to run. Set one of RUN_ATTENTION / RUN_POSITIONAL / RUN_HYBRID / RUN_AFT = True")

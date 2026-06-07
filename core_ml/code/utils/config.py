@@ -15,9 +15,9 @@ class TransformerConfig:
     dropout:   float = 0.1
 
     # ── Attention variant ────────────────────────────────────────────────────
-    # "standard" | "sliding_window" | "sparse_block" | "linear"
-    # "gqa"      | "mqa"            | "softmax_free"
-    # "rope"     | "rope_interp"    | "alibi"        | "relative"
+    # "standard" | "sliding_window" | "sparse_block" 
+    # "gqa"      | "mqa"            | "relative"
+    # "rope"     | "rope_interp"    | "alibi"         
     attention_type: str = "standard"
 
     # ── Positional encoding ──────────────────────────────────────────────────

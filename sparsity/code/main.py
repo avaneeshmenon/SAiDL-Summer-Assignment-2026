@@ -151,7 +151,7 @@ if __name__ == "__main__":
  
     RUN_PART1 = False
     RUN_PART2 = False
-    RUN_PART3 = True          # ← toggle this
+    RUN_PART3 = False          # ← toggle this
  
     if RUN_PART1:
         run_part1()

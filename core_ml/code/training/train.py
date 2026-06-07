@@ -45,7 +45,7 @@ def train(model, cfg, train_loader, val_loader, optimizer, device):
         if device == "cuda":
             torch.cuda.reset_peak_memory_stats()
 
-        # 🔥 Clean table header (printed once per epoch)
+        # Clean table header (printed once per epoch)
         print("\nStep | Train | Val | PPL | GradNorm | Thrpt | Mem")
         print("-" * 60)
 

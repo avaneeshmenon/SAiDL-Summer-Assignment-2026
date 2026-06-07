@@ -343,8 +343,6 @@ class MultiQueryAttention(nn.Module):
 
 # ─────────────────────────────────────────────
 # 8. RoPE ATTENTION
-# kept for backward compat with Part 2/3 runs
-# (attention_type = "rope" still works)
 # ─────────────────────────────────────────────
 
 class RoPEAttention(nn.Module):
@@ -408,7 +406,6 @@ class RoPEWithInterpolation(RoPEAttention):
 
 # ─────────────────────────────────────────────
 # 10. ALiBi
-# kept for backward compat with Part 2/3 runs
 # ─────────────────────────────────────────────
 
 class ALiBiAttention(nn.Module):
@@ -452,7 +449,6 @@ class ALiBiAttention(nn.Module):
 
 # ─────────────────────────────────────────────
 # 11. RELATIVE POSITIONAL ATTENTION
-# kept for backward compat with Part 2/3 runs
 # ─────────────────────────────────────────────
 
 class RelativePositionalAttention(nn.Module):
@@ -503,7 +499,6 @@ ATTENTION_REGISTRY = {
     "gqa":            GroupedQueryAttention,
     "mqa":            MultiQueryAttention,
 
-    # backward compat — Part 2/3 runs unchanged
     "rope":           RoPEAttention,
     "rope_interp":    RoPEWithInterpolation,
     "alibi":          ALiBiAttention,
