@@ -28,4 +28,5 @@ experiments/*/checkpoints/
 experiments/*/*.pt
 
 # ── VSCode ─────────────────────────────────────────────
-.vscode/
+.vscode/.DS_Store
+__pycache__/
